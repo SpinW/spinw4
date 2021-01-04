@@ -1,0 +1,17 @@
+name: Run SpinW tests
+
+on: pull_request
+
+jobs:
+  test:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run Matlab
+        run: |
+          matlab -batch "addpath(genpath('spinw')); run run_tests.m"
+      - uses: 5monkeys/cobertura-action@master
+        with:
+            path: test_output/spinw_coverage.xml
+            repo_token: ${{ secrets.GITHUB_TOKEN }}
+            minimum_coverage: 20
