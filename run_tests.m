@@ -5,10 +5,10 @@ function result = run_tests(out_dir)
         addpath('dat_files');
     end
     if nargin == 0
-        out_dir = fullfile(pwd, 'test_output');
-        if ~exist(out_dir, 'dir')
-            mkdir(out_dir);
-        end
+        out_dir = fullfile(pwd);
+    end
+    if ~exist(out_dir, 'dir')
+        mkdir(out_dir);
     end
 
     import matlab.unittest.TestSuite
@@ -16,7 +16,7 @@ function result = run_tests(out_dir)
     import matlab.unittest.plugins.CodeCoveragePlugin
     import matlab.unittest.plugins.codecoverage.CoberturaFormat
 
-    reportFormat = CoberturaFormat(fullfile(out_dir, 'spinw_coverage.xml'));
+    reportFormat = CoberturaFormat(fullfile(out_dir, 'coverage.xml'));
     coverage_plugin = CodeCoveragePlugin.forFolder('swfiles', 'Producing', reportFormat);
     %coverage_plugin = CodeCoveragePlugin.forFile('swfiles/@spinw/spinwave.m', 'Producing', reportFormat);
 
