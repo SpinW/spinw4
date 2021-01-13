@@ -1,0 +1,21 @@
+name: Run SpinW tests
+
+on: pull_request
+
+jobs:
+  test_windows:
+    runs-on: [self-hosted, Windows]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run Matlab
+        run: matlab -batch "run run_tests.m"
+  test_linux:
+    runs-on: [self-hosted, Linux]
+    steps:
+      - uses: actions/checkout@v2
+      - name: Run Matlab
+        run: matlab -batch "run run_tests.m"
+      - uses: codecov/codecov-action@v1
+        with:
+            files: coverage.xml
+            token: ${{ secrets.CODECOV_TOKEN }}
