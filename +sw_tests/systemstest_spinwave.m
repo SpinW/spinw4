@@ -48,17 +48,27 @@ classdef systemstest_spinwave < matlab.unittest.TestCase
     end
 
     methods
-        function generate_or_verify(testCase, spec, pars)
+        function generate_or_verify(testCase, spec, pars, extrafields)
             import matlab.unittest.constraints.IsEqualTo
             import matlab.unittest.constraints.RelativeTolerance
             import matlab.unittest.constraints.AbsoluteTolerance
             theseBounds = RelativeTolerance(testCase.relToll) | AbsoluteTolerance(testCase.absToll);
-            fieldname = ['d' reshape(dec2hex(testCase.get_hash(pars)),1,[])];
+            if isempty(pars)
+                fieldname = 'data';
+            else
+                fieldname = ['d' reshape(dec2hex(testCase.get_hash(pars)),1,[])];
+            end
             if testCase.generate_reference_data
                 data.input = struct(testCase.swobj);
                 data.spec = {spec.omega spec.Sab};
                 if isfield(spec, 'swConv'); data.spec = [data.spec {spec.swConv}]; end
                 if isfield(spec, 'swInt');  data.spec = [data.spec {spec.swInt}];  end
+                if nargin > 3
+                    extras = fieldnames(extrafields);
+                    for ii = 1:numel(extras)
+                        data.(extras{ii}) = extrafields.(extras{ii});
+                    end
+                end
                 filename = fullfile(testCase.reference_data_dir, testCase.reference_data_file);
                 tmpstr.(fieldname) = data;
                 save(filename, '-append', '-struct', 'tmpstr');
@@ -68,6 +78,12 @@ classdef systemstest_spinwave < matlab.unittest.TestCase
                 test_data.spec = {spec.omega spec.Sab};
                 if isfield(spec, 'swConv'); test_data.spec = [test_data.spec {spec.swConv}]; end
                 if isfield(spec, 'swInt');  test_data.spec = [test_data.spec {spec.swInt}];  end
+                if nargin > 3
+                    extras = fieldnames(extrafields);
+                    for ii = 1:numel(extras)
+                        test_data.(extras{ii}) = extrafields.(extras{ii});
+                    end
+                end
                 testCase.verifyThat(test_data, IsEqualTo(ref_data, 'Within', theseBounds));
             end
         end

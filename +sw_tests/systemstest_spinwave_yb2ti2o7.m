@@ -42,10 +42,10 @@ classdef systemstest_spinwave_yb2ti2o7 < sw_tests.systemstest_spinwave
             testCase.swobj.genmagstr('S',n','mode','helical');
             % find best structure using steepest descendend
             testCase.swobj.optmagsteep;
-            ytoSpec = testCase.swobj.spinwave([Q {200}],'gtensor',true);
+            ytoSpec = testCase.swobj.spinwave([Q {50}],'gtensor',true);
             ytoSpec = sw_neutron(ytoSpec);
             % bin the spectrum in energy
-            ytoSpec = sw_egrid(ytoSpec,'Evect',linspace(0,2,500),'component','Sperp');
+            ytoSpec = sw_egrid(ytoSpec,'Evect',linspace(0,2,100),'component','Sperp');
             %figure; sw_plotspec(ytoSpec,'axLim',[0 0.5],'mode',3,'dE',0.09,'colorbar',false,'legend',false); title(''); caxis([0 60]); colormap(jet);
             testCase.generate_or_verify(ytoSpec, {B Q});
         end
