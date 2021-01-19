@@ -33,7 +33,7 @@ classdef systemstest_spinwave_KCu3As2O7 < sw_tests.systemstest_spinwave
             hK = testCase.swobj;
             hK.genmagstr('mode','helical','n',[0 0 1],'S',[1 0 0]','k',[0.77 0 0.115],'next',[1 1 1]);
             optpar.func = @gm_planar;
-            optpar.nRun = 5;
+            optpar.nRun = 10;
             optpar.xmin = [    zeros(1,6), 0.5 0 0.0, 0 0];
             optpar.xmax = [2*pi*ones(1,6), 1.0 0 0.5, 0 0];
             magoptOut = hK.optmagstr(optpar);

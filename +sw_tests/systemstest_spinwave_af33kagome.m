@@ -22,9 +22,9 @@ classdef systemstest_spinwave_af33kagome < sw_tests.systemstest_spinwave
             AF33kagome = testCase.swobj;
             S0 = [0 0 -1; 1 1 -1; 0 0 0];
             AF33kagome.genmagstr('mode','helical','k',[-1/3 -1/3 0],'n',[0 0 1],'unit','lu','S',S0,'nExt',[1 1 1]);
-            kag33Spec = AF33kagome.spinwave({[-1/2 0 0] [0 0 0] [1/2 1/2 0] 100},'hermit',false);
+            kag33Spec = AF33kagome.spinwave({[-1/2 0 0] [0 0 0] [1/2 1/2 0] 100},'hermit',false,'saveSabp',true);
             kag33Spec = sw_egrid(kag33Spec,'component','Sxx+Syy+Szz','imagChk',false);
-            testCase.generate_or_verify(kag33Spec, {}, struct('energy', AF33kagome.energy));
+            testCase.generate_or_verify(kag33Spec, {}, struct('energy', AF33kagome.energy, 'Sabp', kag33Spec.Sabp));
         end
     end
 
