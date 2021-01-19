@@ -1,6 +1,6 @@
 name: Run SpinW tests
 
-on: pull_request
+on: [pull_request, push, workflow_dispatch]
 
 jobs:
   test_windows:
