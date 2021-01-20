@@ -75,16 +75,18 @@ classdef systemstest_spinwave_pcsmo < sw_tests.systemstest_spinwave
             pcsmo.unit.qmat = diag([2 2 1]);
             % Assign to property
             testCase.swobj = pcsmo;
+            testCase.absToll = 2e-6;
         end
     end
 
     methods (Test)
         function test_pcsmo(testCase)
-            qln = {[0 0 0] [2 0 0] 50};
+            % (002) is problematic - Goldstone mode gives indexing error in different Matlab versions
+            qln = {[0 0 0] [1.98 0 0] 50};
             spec = testCase.swobj.spinwave(qln, 'formfact', true, 'saveV', true, 'saveH', true);
             spec = sw_egrid(spec, 'Evect', linspace(0, 100, 200));
             spec = sw_neutron(spec);
-            testCase.generate_or_verify(spec, {}, struct('V', spec.V, 'H', spec.H));
+            testCase.generate_or_verify(spec, {}, struct('V', spec.V, 'H', spec.H), 'approxSab', 0.1);
         end
     end
 

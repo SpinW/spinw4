@@ -45,10 +45,65 @@ classdef systemstest_spinwave < matlab.unittest.TestCase
             Engine.update(getByteStreamFromArray(obj));
             out = typecast(Engine.digest, 'uint8');
         end
+        function out = sanitize_data(in_dat)
+            if isstruct(in_dat)
+                out = sanitize_struct(in_dat);
+            elseif iscell(in_dat)
+                out = sanitize_cell(in_dat);
+            elseif isnumeric(in_dat)
+                out = sanitize(in_dat);
+            else
+                out = in_dat;
+            end
+        end
     end
 
     methods
-        function generate_or_verify(testCase, spec, pars, extrafields)
+        function out = approxMatrix(testCase, actual, expected, frac_not_match)
+            % Checks if two arrays are approximately the same with most entries equal but a fraction not
+            if iscell(actual)
+                out = actual;
+                for ii = 1:numel(actual)
+                    out{ii} = testCase.approxMatrix(actual{ii}, expected{ii}, frac_not_match);
+                end
+            else
+                diff = abs(actual - expected);
+                rel_diff = diff ./ expected;
+                if (numel(find((diff > testCase.absToll) & (rel_diff > testCase.relToll))) / numel(actual)) < frac_not_match
+                    out = expected;
+                else
+                    out = actual;
+                end
+            end
+        end
+        function [actual, expected] = verify_eigval_sort(testCase, actual, expected, nested)
+            if nargin < 4
+                nested = 0;
+            end
+            if iscell(actual)
+                for ii = 1:numel(actual)
+                    [actual{ii}, expected{ii}] = testCase.verify_eigval_sort(actual{ii}, expected{ii}, nested);
+                end
+            else
+                % Checks if actual and expected eigenvalues match, otherwise try a different sorting
+                import matlab.unittest.constraints.*
+                theseBounds = RelativeTolerance(testCase.relToll) | AbsoluteTolerance(testCase.absToll);
+                comparator = IsEqualTo(expected, 'Within', theseBounds);
+                if ~comparator.satisfiedBy(actual)
+                    if nested > 1
+                        actual = sort(abs(actual));
+                        expected = sort(abs(expected));
+                    else
+                        actual = sort(actual, 'ComparisonMethod', 'real');
+                        expected = sort(expected, 'ComparisonMethod', 'real');
+                    end
+                    if nested < 2
+                        [actual, expected] = testCase.verify_eigval_sort(actual, expected, nested + 1);
+                    end
+                end
+            end
+        end
+        function generate_or_verify(testCase, spec, pars, extrafields, approxSab, tolSab)
             import matlab.unittest.constraints.IsEqualTo
             import matlab.unittest.constraints.RelativeTolerance
             import matlab.unittest.constraints.AbsoluteTolerance
@@ -57,6 +112,11 @@ classdef systemstest_spinwave < matlab.unittest.TestCase
                 fieldname = 'data';
             else
                 fieldname = ['d' reshape(dec2hex(testCase.get_hash(pars)),1,[])];
+            end
+            if nargin < 5
+                approxSab = false;
+            elseif nargin == 5
+                tolSab = 0.05;
             end
             if testCase.generate_reference_data
                 data.input = struct(testCase.swobj);
@@ -75,6 +135,7 @@ classdef systemstest_spinwave < matlab.unittest.TestCase
             else
                 ref_data = testCase.reference_data.(fieldname);
                 test_data.input = struct(testCase.swobj);
+                [spec.omega, ref_data.spec{1}] = testCase.verify_eigval_sort(spec.omega, ref_data.spec{1});
                 test_data.spec = {spec.omega spec.Sab};
                 if isfield(spec, 'swConv'); test_data.spec = [test_data.spec {spec.swConv}]; end
                 if isfield(spec, 'swInt');  test_data.spec = [test_data.spec {spec.swInt}];  end
@@ -84,6 +145,21 @@ classdef systemstest_spinwave < matlab.unittest.TestCase
                         test_data.(extras{ii}) = extrafields.(extras{ii});
                     end
                 end
+                if any(approxSab)
+                    % For the Sab or Sabp tensor, just check that a fraction of entries match
+                    test_data.spec{2} = testCase.approxMatrix(spec.Sab, ref_data.spec{2}, tolSab);
+                    if numel(test_data.spec) == 4
+                        test_data.spec{4} = testCase.approxMatrix(spec.swInt, ref_data.spec{4}, tolSab);
+                    end
+                    if isfield(test_data, 'Sabp')
+                        test_data.Sabp = testCase.approxMatrix(test_data.Sabp, ref_data.Sabp, tolSab);
+                    end
+                    if isfield(test_data, 'V')
+                        test_data.V = testCase.approxMatrix(test_data.V, ref_data.V, tolSab);
+                    end
+                end
+                test_data = testCase.sanitize_data(test_data);
+                ref_data = testCase.sanitize_data(ref_data);
                 testCase.verifyThat(test_data, IsEqualTo(ref_data, 'Within', theseBounds));
             end
         end
@@ -91,4 +167,35 @@ classdef systemstest_spinwave < matlab.unittest.TestCase
 
 end
 
+function out = sanitize(array)
+    out = array;
+    out(abs(out) > 1e8) = 0;
+end
 
+function sanitized = sanitize_struct(in_dat)
+    fnam = fieldnames(in_dat);
+    for ii = 1:numel(fnam)
+        if isnumeric(in_dat.(fnam{ii}))
+            sanitized.(fnam{ii}) = sanitize(in_dat.(fnam{ii}));
+        elseif isstruct(in_dat.(fnam{ii}))
+            sanitized.(fnam{ii}) = sanitize_struct(in_dat.(fnam{ii}));
+        elseif iscell(in_dat.(fnam{ii}))
+            sanitized.(fnam{ii}) = sanitize_cell(in_dat.(fnam{ii}));
+        else
+            sanitized.(fnam{ii}) = in_dat.(fnam{ii});
+        end
+    end
+end
+
+function sanitized = sanitize_cell(in_dat)
+    sanitized = in_dat;
+    for ii = 1:numel(in_dat)
+        if isnumeric(in_dat{ii})
+            sanitized{ii} = sanitize(in_dat{ii});
+        elseif isstruct(in_dat{ii})
+            sanitized{ii} = sanitize_struct(in_dat{ii});
+        elseif iscell(in_dat{ii})
+            sanitized{ii} = sanitize_cell(in_dat{ii});
+        end
+    end
+end

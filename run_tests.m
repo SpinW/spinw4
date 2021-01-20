@@ -1,4 +1,5 @@
 function result = run_tests(out_dir)
+    disp(version);
     if ~exist('spinw', 'file') && exist('swfiles', 'file')
         addpath(genpath('swfiles'));
         addpath(genpath('external'));

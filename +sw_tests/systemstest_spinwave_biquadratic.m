@@ -33,7 +33,7 @@ classdef systemstest_spinwave_biquadratic < sw_tests.systemstest_spinwave
             spec = fcc.spinwave({[1 0 0] [0 0 0] [1/2 1/2 0] [1/2 1/2 1/2] [0 0 0] 50});
             spec = sw_egrid(spec);
             spec = sw_omegasum(spec,'zeroint',1e-5,'emptyval',0);
-            testCase.generate_or_verify(spec, {});
+            testCase.generate_or_verify(spec, {}, struct(), 'approxSab', 0.01);
         end
     end
 
