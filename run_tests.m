@@ -23,5 +23,8 @@ function result = run_tests(out_dir)
     suite = TestSuite.fromPackage('sw_tests');
     runner = TestRunner.withTextOutput;
     runner.addPlugin(coverage_plugin);
-    result = runner.run(suite);
+    result = runner.run(suite)
+    if(any(arrayfun(@(x) x.Failed, result)))
+        error('Test failed');
+    end
 end
