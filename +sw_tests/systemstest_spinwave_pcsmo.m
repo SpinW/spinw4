@@ -5,14 +5,12 @@ classdef systemstest_spinwave_pcsmo < sw_tests.systemstest_spinwave
     end
 
     properties (TestParameter)
-        B = {2 5};
-        Q = {{[-0.5 -0.5 -0.5] [2 2 2]} {[1 1 -2] [1 1 1.5]} {[2 2 -2] [2 2 1.5]} {[-0.5 -0.5 0] [2.5 2.5 0]} {[0 0 1] [2.3 2.3 1]}};
+        usehorace = {false true};
     end
 
     methods (TestMethodSetup)
         function prepareForRun(testCase)
             % Runs the Goodenough model for (Pr,Ca)SrMn2O7, based on PRL, 109, 237202 (2012)
-            %pcsmo = pcsmo_model(JF1, JA, JF2, JF3, Jperp, D)
             JF1 = -11.39; JA = 1.5; JF2 = -1.35; JF3 = 1.5; Jperp = 0.88; D = 0.074;
             lat = [5.408 5.4599 19.266]; alf = [90 90 90];
             SM4 = 7/4;   % Spin length for Mn4+
@@ -70,7 +68,7 @@ classdef systemstest_spinwave_pcsmo < sw_tests.systemstest_spinwave
             pcsmo.addcoupling('mat', 'JF2', 'bond', 8, 'subIdx', [idstart; idend]')
             pcsmo.addaniso('D')
             % Define twins
-            pcsmo.twin.rotc(:,:,2) = [0 1 0; 1 0 0; 0 0 0];
+            pcsmo.addtwin('rotC', [0 1 0; 1 0 0; 0 0 0]);
             pcsmo.twin.vol = [0.5 0.5];
             pcsmo.unit.qmat = diag([2 2 1]);
             % Assign to property
@@ -80,13 +78,23 @@ classdef systemstest_spinwave_pcsmo < sw_tests.systemstest_spinwave
     end
 
     methods (Test)
-        function test_pcsmo(testCase)
+        function test_pcsmo(testCase, usehorace)
             % (002) is problematic - Goldstone mode gives indexing error in different Matlab versions
             qln = {[0 0 0] [1.98 0 0] 50};
-            spec = testCase.swobj.spinwave(qln, 'formfact', true, 'saveV', true, 'saveH', true);
-            spec = sw_egrid(spec, 'Evect', linspace(0, 100, 200));
-            spec = sw_neutron(spec);
-            testCase.generate_or_verify(spec, {}, struct('V', spec.V, 'H', spec.H), 'approxSab', 0.1);
+            if usehorace
+                hkl = sw_qscan(qln);
+                % spinwavefast doesn't work for twins yet
+                testCase.swobj.notwin();
+                [w0, s0] = testCase.swobj.horace(hkl(:,1), hkl(:,2), hkl(:,3), 'dE', 2, 'useFast', false);
+                [w1, s1] = testCase.swobj.horace(hkl(:,1), hkl(:,2), hkl(:,3), 'dE', 2, 'useFast', true);
+                testCase.verify_test_data({w0(1:numel(w1)) s0(1:numel(w1))}, {w1 s1});
+                testCase.generate_or_verify_generic({w0 s0}, 'data_horace');
+            else
+                spec = testCase.swobj.spinwave(qln, 'formfact', true, 'saveV', true, 'saveH', true);
+                spec = sw_egrid(spec, 'Evect', linspace(0, 100, 200));
+                spec = sw_neutron(spec);
+                testCase.generate_or_verify(spec, {}, struct('V', spec.V, 'H', spec.H), 'approxSab', 0.1);
+            end
         end
     end
 

@@ -103,16 +103,30 @@ classdef systemstest_spinwave < matlab.unittest.TestCase
                 end
             end
         end
-        function generate_or_verify(testCase, spec, pars, extrafields, approxSab, tolSab)
+        function fieldname = get_fieldname(testCase, pars)
+            if isempty(pars)
+                fieldname = 'data';
+            elseif ischar(pars);
+                fieldname = pars;
+            else
+                fieldname = ['d' reshape(dec2hex(testCase.get_hash(pars)),1,[])];
+            end
+        end
+        function save_test_data(testCase, data, pars)
+            filename = fullfile(testCase.reference_data_dir, testCase.reference_data_file);
+            tmpstr.(testCase.get_fieldname(pars)) = data;
+            save(filename, '-append', '-struct', 'tmpstr');
+        end
+        function verify_test_data(testCase, test_data, ref_data)
             import matlab.unittest.constraints.IsEqualTo
             import matlab.unittest.constraints.RelativeTolerance
             import matlab.unittest.constraints.AbsoluteTolerance
             theseBounds = RelativeTolerance(testCase.relToll) | AbsoluteTolerance(testCase.absToll);
-            if isempty(pars)
-                fieldname = 'data';
-            else
-                fieldname = ['d' reshape(dec2hex(testCase.get_hash(pars)),1,[])];
-            end
+            test_data = testCase.sanitize_data(test_data);
+            ref_data = testCase.sanitize_data(ref_data);
+            testCase.verifyThat(test_data, IsEqualTo(ref_data, 'Within', theseBounds));
+        end
+        function generate_or_verify(testCase, spec, pars, extrafields, approxSab, tolSab)
             if nargin < 5
                 approxSab = false;
             elseif nargin == 5
@@ -129,11 +143,9 @@ classdef systemstest_spinwave < matlab.unittest.TestCase
                         data.(extras{ii}) = extrafields.(extras{ii});
                     end
                 end
-                filename = fullfile(testCase.reference_data_dir, testCase.reference_data_file);
-                tmpstr.(fieldname) = data;
-                save(filename, '-append', '-struct', 'tmpstr');
+                testCase.save_test_data(data, pars);
             else
-                ref_data = testCase.reference_data.(fieldname);
+                ref_data = testCase.reference_data.(testCase.get_fieldname(pars));
                 test_data.input = struct(testCase.swobj);
                 [spec.omega, ref_data.spec{1}] = testCase.verify_eigval_sort(spec.omega, ref_data.spec{1});
                 test_data.spec = {spec.omega spec.Sab};
@@ -158,9 +170,14 @@ classdef systemstest_spinwave < matlab.unittest.TestCase
                         test_data.V = testCase.approxMatrix(test_data.V, ref_data.V, tolSab);
                     end
                 end
-                test_data = testCase.sanitize_data(test_data);
-                ref_data = testCase.sanitize_data(ref_data);
-                testCase.verifyThat(test_data, IsEqualTo(ref_data, 'Within', theseBounds));
+                testCase.verify_test_data(test_data, ref_data);
+            end
+        end
+        function generate_or_verify_generic(testCase, data, fieldname)
+            if testCase.generate_reference_data
+                testCase.save_test_data(data, fieldname);
+            else
+                testCase.verify_test_data(data, testCase.reference_data.(fieldname));
             end
         end
     end
