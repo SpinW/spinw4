@@ -49,6 +49,11 @@ classdef systemstest_spinwave_yb2ti2o7 < sw_tests.systemstest_spinwave
             %figure; sw_plotspec(ytoSpec,'axLim',[0 0.5],'mode',3,'dE',0.09,'colorbar',false,'legend',false); title(''); caxis([0 60]); colormap(jet);
             testCase.generate_or_verify(ytoSpec, {B Q}, struct(), 'approxSab', 0.5);
         end
+        function test_yto_twin(testCase)
+            % Adds a twin and runs test with single field/Q
+            testCase.swobj.addtwin('axis', [1 -1 0], 'phid', 90);
+            testCase.test_yto(4, {[-0.5 -0.5 -0.5] [2 2 2]});
+        end
     end
 
 end
