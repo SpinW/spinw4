@@ -217,20 +217,20 @@ for jj = 1:nSlice
     % q values without the +/-k_m vector
     hklExt0MEM = hklExt0(:,hklIdxMEM);
     nHklMEM = size(hklExtMEM,2);
-    
+
     % Creates the matrix of exponential factors nCoupling x nHkl size.
     % Extends dR into 3 x 3 x nCoupling x nHkl
     %     ExpF = exp(1i*permute(sum(repmat(dR,[1 1 nHklMEM]).*repmat(...
     %         permute(hklExtMEM,[1 3 2]),[1 nCoupling 1]),1),[2 3 1]))';
     ExpF = exp(1i*permute(sum(bsxfun(@times,dR,permute(hklExtMEM,[1 3 2])),1),[2 3 1]))';
-    
+
     % Creates the matrix elements containing zed.
     A1 = bsxfun(@times,     AD0 ,ExpF);
     B  = bsxfun(@times,     BC0 ,ExpF);
     D1 = bsxfun(@times,conj(AD0),ExpF);
-    
-    
-    
+
+
+
     % Store all indices
     % SP1: speedup for creating the matrix elements
     %idxAll = [idxA1; idxB; idxC; idxD1]; % SP1
@@ -238,42 +238,42 @@ for jj = 1:nSlice
     % Store all matrix elements
     %ABCD   = [A1     B     conj(B)  D1]; % SP1
     ABCD   = [A1     2*B      D1];
-    
+
     % Stores the matrix elements in ham.
     %idx3   = repmat(1:nHklMEM,[4*nCoupling 1]); % SP1
     idx3   = repmat(1:nHklMEM,[3*nCoupling 1]);
     idxAll = [repmat(idxAll,[nHklMEM 1]) idx3(:)];
     idxAll = idxAll(:,[2 1 3]);
-    
+
     ABCD   = ABCD';
-    
-    
+
+
     % quadratic form of the boson Hamiltonian stored as a square matrix
     ham = accumarray(idxAll,ABCD(:),[2*nMagExt 2*nMagExt nHklMEM]);
-    
+
     ham = ham + repmat(accumarray([idxA2; idxD2],2*[A20 D20],[1 1]*2*nMagExt),[1 1 nHklMEM]);
-    
+
     if any(SI.field)
         ham = ham + repmat(accumarray(idxMF,MF,[1 1]*2*nMagExt),[1 1 nHklMEM]);
     end
-   
+
     ham = (ham + conj(permute(ham,[2 1 3])))/2;
 
     if param.hermit
         % All the matrix calculations are according to Colpa's paper
         % J.H.P. Colpa, Physica 93A (1978) 327-353
         [V, omega(:,hklIdxMEM)] = spinwave_hermit(ham, param, useMex, nMagExt);
-        
+
     else
         % All the matrix calculations are according to White's paper
         % R.M. White, et al., Physical Review 139, A450?A454 (1965)
-        
+
         gham = mmat(gComm,ham);
-        
+
         [V, D, orthWarn] = eigorth(gham,param.omega_tol,useMex);
-        
+
         orthWarn0 = orthWarn || orthWarn0;
-        
+
         for ii = 1:nHklMEM
             % multiplication with g removed to get negative and positive
             % energies as well
@@ -282,16 +282,16 @@ for jj = 1:nSlice
             V(:,:,ii)      = V(:,:,ii)*diag(sqrt(1./M));
         end
     end
-    
+
     if param.saveV
         Vsave(:,:,hklIdxMEM) = V;
     end
     if param.saveH
         Hsave(:,:,hklIdxMEM) = ham;
     end
-   
+
     Sab = cat(4, Sab, spinwave_spinspincorrel(V, RR, param, hklExt0MEM, hklIdxMEM, nHklMEM, nMagExt, zed, SI, nExt, S0));
-    
+
     sw_timeit(jj/nSlice*100,0,param.tid);
 end
 
@@ -388,11 +388,11 @@ function [V, omega] = spinwave_hermit(ham, param, useMex, nMagExt)
     % boson commutator matrix
     gComm  = diag(gCommd);
     %gd = diag(g);
-    
+
     % basis functions of the magnon modes
     V = zeros(2*nMagExt,2*nMagExt,nHklMEM);
     omega = zeros(2*nMagExt,0);
-    
+
     if useMex && nHklMEM>1
         % use mex files to speed up the calculation
         % mex file will return an error if the matrix is not positive definite.
@@ -435,19 +435,19 @@ function [V, omega] = spinwave_hermit(ham, param, useMex, nMagExt)
                         ' diagonalization try the param.hermit=false option']);
                 end
             end
-            
+
             K2 = K*gComm*K';
             K2 = 1/2*(K2+K2');
             % Hermitian K2 will give orthogonal eigenvectors
             [U, D] = eig(K2);
             D      = diag(D);
-            
+
             % sort modes accordign to the real part of the energy
             [~, idx] = sort(real(D),'descend');
             U = U(:,idx);
             % omega dispersion
             omega(:,end+1) = D(idx); %#ok<AGROW>
-            
+
             % the inverse of the para-unitary transformation V
             V(:,:,ii) = inv(K)*U*diag(sqrt(gCommd.*omega(:,end))); %#ok<MINV>
         end
