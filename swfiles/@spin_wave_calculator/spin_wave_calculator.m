@@ -89,7 +89,7 @@ classdef spin_wave_calculator
             % every magnetic atom
             self.zed = e1 + 1i*e2;
             self.eta = e3;
-
+            % self.nMagExt = nMagExt;
         end
 
         function prepareHamiltonian_hkl(self, hkl)
@@ -116,6 +116,34 @@ classdef spin_wave_calculator
             % q values without the +/-k_m value
             hklExt0 = hklExt;
         end
+
+        function nSlice = computeNumSlice(self)
+            nMagExt = self.spinWaveObject.mag_str.nExt;
+            if param.optmem == 0
+                freeMem = sw_freemem;
+                if freeMem > 0
+                    nSlice = ceil(nMagExt^2*nHkl*6912/freeMem*2);
+                else
+                    nSlice = 1;
+                    if ~param.fitmode
+                        warning('spinw:spinwave:FreeMemSize','The size of the free memory is unkown, no memory optimisation!');
+                    end
+                end
+            else
+                nSlice = param.optmem;
+            end
+
+            if nHkl < nSlice
+                fprintf0(fid,['Memory allocation is not optimal, nMagExt is'...
+                    ' too large compared to the free memory!\n']);
+                nSlice = nHkl;
+            elseif nSlice > 1
+                fprintf0(fid,['To optimise memory allocation, Q is cut'...
+                    ' into %d pieces!\n'],nSlice);
+            end
+
+        end
+
 
         function prepareHamiltonian(self)
 
