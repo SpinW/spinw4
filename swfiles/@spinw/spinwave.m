@@ -250,6 +250,16 @@ if nargin==1
     return
 end
 
+%% New object-oriented code
+sw_calculator = sw_classes.spin_wave_calculator(obj, varargin{:});
+if ~sw_calculator.magnetic_structure.incomm
+    spectra = sw_calculator.calculateSpinWave(hkl);
+    return;
+end
+
+
+%% Old functional code
+
 % for linear scans create the Q line(s)
 hkl = sw_qscan(hkl);
 
