@@ -23,38 +23,54 @@ classdef spin_wave_calculator < handle
             self.prepareHamiltonian();
         end
         function spectra = calculateSpinWave(self, hkl)
-            nTwins = self.checkTwins();
             self.qvectors = sw_classes.qvectors(hkl);
             nChunk = self.computeNumChunk();
+            self.qvectors.nChunk = nChunk;
+            nTwins = self.checkTwins();
             omega_twin = cell(1,nTwins);
             Sab_twin = cell(1,nTwins);
             Hsave_twin = cell(1,nTwins);
             Vsave_twin = cell(1,nTwins);
-            self.qvectors.nChunk = nChunk;
+            % Gets the transformation matrices for the hkl for each twin
+            [~, rotQ] = self.spinWaveObject.twinq([0;0;0]);
             for iTwin = 1:nTwins
-                rotC = obj.twin.rotc(:,:,iTwin);
+                rotC = self.spinWaveObject.twin.rotc(:,:,iTwin);
+                omega = [];
+                Sab = cell(1, nChunk);
+                Hsave = [];
+                Vsave = [];
                 for ii = 1:nChunk
                     hklIdxMEM = self.qvectors.getIdx(ii);
-                    [ham, hklExt] = self.calculateHamiltonian(self.qvectors.getChunk(ii),rotC);
-                    if self.parameters.saveH
-                        Hsave(:,:,hklIdxMEM) = ham;
+                    hklChunk = self.qvectors.getChunk(ii);
+                    if ~self.parameters.notwin
+                        hklChunk = (hklChunk' * rotQ(:,:,iTwin))';
                     end
-                    [V, omega(:,hklIdxMEM)] = self.diagonaliseHamiltonian(ham);
+                    [ham, hklExt] = self.calculateHamiltonian(hklChunk, rotC);
+                    if self.parameters.saveH
+                        Hsave(:,:,hklIdxMEM) = ham; %#ok<AGROW>
+                    end
+                    [V, omega(:,hklIdxMEM)] = self.diagonaliseHamiltonian(ham);  %#ok<AGROW>
                     if self.parameters.saveV
-                        Vsave(:,:,hklIdxMEM) = V;
+                        Vsave(:,:,hklIdxMEM) = V; %#ok<AGROW>
                     end
                     Sab{ii} = self.spinspincorrel(V, hklExt, hklIdxMEM);
                 end
-                if self.parameters.notwin
+                Sab = cat(4, Sab{:});
+                if self.parameters.sortMode
+                    % sort the spin wave modes
+                    [omega, Sab] = sortmode(omega,reshape(Sab,9,size(Sab,3),[]));
+                    Sab          = reshape(Sab,3,3,size(Sab,2),[]);
+                end
+                if ~self.parameters.notwin
                     omega_twin{iTwin} = omega;
-                    Sab_twin{iTwin} = cat(4, Sab{:});
+                    Sab_twin{iTwin} = Sab;
                     if self.parameters.saveV
                         Vsave_twin{iTwin} = Vsave;
                     end
                     if self.parameters.saveH
                         Hsave_twin{iTwin} = Hsave;
                     end
-                    if isdiag(rotC) && all(abs(diag(rotC) - 1) < self.parameters.tol)
+                    if ~(isdiag(rotC) && all(abs(diag(rotC) - 1) < self.parameters.tol))
                         % Rotates the spin-spin correlation tensor using the twin rotation matrix
                         sSab = size(Sab_twin{iTwin});
                         % TODO: consider using a simple loop of 'reshape->arrayfun->reshape' operation
@@ -68,7 +84,7 @@ classdef spin_wave_calculator < handle
             % Creates output structure with the calculated values.
             if self.parameters.notwin
                 spectra.omega    = omega;
-                spectra.Sab      = cat(4, Sab{:});
+                spectra.Sab      = Sab;
             else
                 spectra.omega    = omega_twin;
                 spectra.Sab      = Sab_twin;
@@ -80,10 +96,18 @@ classdef spin_wave_calculator < handle
             spectra.nformula = double(self.spinWaveObject.unit.nformula);
             % Save different intermediate results.
             if self.parameters.saveV
-                spectra.V = Vsave;
+                if self.parameters.notwin
+                    spectra.V = Vsave;
+                else
+                    spectra.V = Vsave_twin;
+                end
             end
             if self.parameters.saveH
-                spectra.H = Hsave;
+                if self.parameters.notwin
+                    spectra.H = Hsave;
+                else
+                    spectra.H = cat(3, Hsave_twin{:});
+                end
             end
             % save the important parameters
             spectra.param.sortMode  = self.parameters.sortMode;
@@ -263,14 +287,10 @@ classdef spin_wave_calculator < handle
         end
 
         function [ham, hklExt] = calculateHamiltonian(self, hkl, rotC)
-
             nExt = self.magnetic_structure.N_ext;
             nMagExt = self.magnetic_structure.nMagExt;
             % Copies the variables in hamVars to this workspace
             assign_vars(self.hamVars);
-
-            % Calculates the contribution of the magnetic field (Zeeman term) to the Hamiltonian
-            MF = repmat(SI.field*rotC*self.spinWaveObject.unit.muB * permute(mmat(SI.g,permute(eta,[1 3 2])),[1 3 2]),[1 2]);
 
             % calculate all magnetic form factors
             if self.parameters.formfact
@@ -291,8 +311,6 @@ classdef spin_wave_calculator < handle
 
             % number of Q points
             nHkl0 = size(hkl,2);
-
-            nTwin = 1;
 
             hkl0   = hkl;
             nHkl   = nHkl0;
@@ -336,6 +354,8 @@ classdef spin_wave_calculator < handle
             ham = ham + repmat(accumarray([idxA2; idxD2],2*[A20 D20],[1 1]*2*nMagExt),[1 1 nHkl]);
 
             if any(SI.field)
+                % Calculates the contribution of the magnetic field (Zeeman term) to the Hamiltonian
+                MF = repmat(SI.field*rotC*self.spinWaveObject.unit.muB * permute(mmat(SI.g,permute(self.eta,[1 3 2])),[1 3 2]),[1 2]);
                 ham = ham + repmat(accumarray(idxMF,MF,[1 1]*2*nMagExt),[1 1 nHkl]);
             end
 
