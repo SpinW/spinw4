@@ -250,12 +250,33 @@ if nargin==1
     return
 end
 
-%% New object-oriented code
 sw_calculator = sw_classes.spin_wave_calculator(obj, varargin{:});
-% if ~sw_calculator.magnetic_structure.incomm
-    spectra = sw_calculator.calculateSpinWave(hkl);
-%     return;
-% end
+spectra = sw_calculator.calculateSpinWave(hkl);
+
+end
+
+function spectra = spinwave_symbolic(obj, hkl, varargin)
+    if obj.symbolic
+        if numel(hkl) == 3
+            hkl = sym(hkl);
+        end
+
+        if ~isa(hkl,'sym')
+            inpForm.fname  = {'fitmode'};
+            inpForm.defval = {false    };
+            inpForm.size   = {[1 1]    };
+            param0 = sw_readparam(inpForm, varargin{:});
+
+            if ~param0.fitmode
+                warning('spinw:spinwave:MissingInput','No hkl value was given, spin wave spectrum for general Q (h,k,l) will be calculated!');
+            end
+            spectra = obj.spinwavesym(varargin{:});
+        else
+            spectra = obj.spinwavesym(varargin{:},'hkl',hkl);
+        end
+        return
+    end
+end
 
 % parse input arguments
 [param, useMex] = spinwave_parse_input(varargin);
