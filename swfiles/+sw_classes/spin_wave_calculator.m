@@ -23,24 +23,56 @@ classdef spin_wave_calculator < handle
             self.prepareHamiltonian();
         end
         function spectra = calculateSpinWave(self, hkl)
+            nTwins = self.checkTwins();
             self.qvectors = sw_classes.qvectors(hkl);
             nChunk = self.computeNumChunk();
+            omega_twin = cell(1,nTwins);
+            Sab_twin = cell(1,nTwins);
+            Hsave_twin = cell(1,nTwins);
+            Vsave_twin = cell(1,nTwins);
             self.qvectors.nChunk = nChunk;
-            for ii = 1:nChunk
-                hklIdxMEM = self.qvectors.getIdx(ii);
-                [ham, hklExt] = self.calculateHamiltonian(self.qvectors.getChunk(ii));
-                if self.parameters.saveH
-                    Hsave(:,:,hklIdxMEM) = ham;
+            for iTwin = 1:nTwins
+                rotC = obj.twin.rotc(:,:,iTwin);
+                for ii = 1:nChunk
+                    hklIdxMEM = self.qvectors.getIdx(ii);
+                    [ham, hklExt] = self.calculateHamiltonian(self.qvectors.getChunk(ii),rotC);
+                    if self.parameters.saveH
+                        Hsave(:,:,hklIdxMEM) = ham;
+                    end
+                    [V, omega(:,hklIdxMEM)] = self.diagonaliseHamiltonian(ham);
+                    if self.parameters.saveV
+                        Vsave(:,:,hklIdxMEM) = V;
+                    end
+                    Sab{ii} = self.spinspincorrel(V, hklExt, hklIdxMEM);
                 end
-                [V, omega(:,hklIdxMEM)] = self.diagonaliseHamiltonian(ham);
-                if self.parameters.saveV
-                    Vsave(:,:,hklIdxMEM) = V;
+                if self.parameters.notwin
+                    omega_twin{iTwin} = omega;
+                    Sab_twin{iTwin} = cat(4, Sab{:});
+                    if self.parameters.saveV
+                        Vsave_twin{iTwin} = Vsave;
+                    end
+                    if self.parameters.saveH
+                        Hsave_twin{iTwin} = Hsave;
+                    end
+                    if isdiag(rotC) && all(abs(diag(rotC) - 1) < self.parameters.tol)
+                        % Rotates the spin-spin correlation tensor using the twin rotation matrix
+                        sSab = size(Sab_twin{iTwin});
+                        % TODO: consider using a simple loop of 'reshape->arrayfun->reshape' operation
+                        Sab = reshape(Sab_twin{iTwin}, 3, 3, []);   % Originally 3x3xNModexNQ now 3x3x(NMode*NQ)
+                        Sab = arrayfun(@(idx)(rotC*Sab(:,:,idx)*(rotC')), 1:size(Sab,3), 'UniformOutput', false);
+                        % Sab is now a cell array of 3x3 matrices
+                        Sab_twin{iTwin} = reshape(cat(3, Sab{:}), sSab);  % Converts back to normal matrix
+                    end
                 end
-                Sab{ii} = self.spinspincorrel(V, hklExt, hklIdxMEM);
             end
             % Creates output structure with the calculated values.
-            spectra.omega    = omega;
-            spectra.Sab      = cat(4, Sab{:});
+            if self.parameters.notwin
+                spectra.omega    = omega;
+                spectra.Sab      = cat(4, Sab{:});
+            else
+                spectra.omega    = omega_twin;
+                spectra.Sab      = Sab_twin;
+            end
             spectra.hkl      = self.qvectors.hkl;
             spectra.hklA     = 2*pi*(spectra.hkl'/self.spinWaveObject.basisvector)';
             spectra.helical  = false; % TODO: sort out incommensurate and helical
@@ -67,7 +99,22 @@ classdef spin_wave_calculator < handle
         end
     end
 
+
     methods(Access=private)
+        function nTwin = checkTwins(self)
+            % checks for twins
+            if self.parameters.notwin
+                nTwin = 1;
+            else
+                nTwin = size(self.spinWaveObject.twin.vol,2);
+                % if there is only one twin and it is the identity set param.notwin true
+                rotc1 = self.spinWaveObject.twin.rotc(:,:,1) - eye(3);
+                if (nTwin == 1) && norm(rotc1(:))==0
+                    self.parameters.notwin = true;
+                end
+            end
+        end
+
         function spinwave_parse_input(self, varargin)
             pref = swpref();
             title0 = 'Numerical LSWT spectrum';
@@ -197,9 +244,6 @@ classdef spin_wave_calculator < handle
             BC0 =  SiSj.*shiftdim(sum(sum(zedL.*JJ.*     zedR ,2),1),1);
             AD0 =  SiSj.*shiftdim(sum(sum(zedL.*JJ.*conj(zedR),2),1),1);
 
-            % Calculates the contribution of the magnetic field (Zeeman term) to the Hamiltonian
-            % MF = repmat(SI.field*rotC*self.spinWaveObject.unit.muB * permute(mmat(SI.g,permute(eta,[1 3 2])),[1 3 2]),[1 2]);
-
             % Creates the serial indices for every matrix element in ham matrix.
             idxA1 = [atom1'         atom2'         ];
             idxA2 = [atom1'         atom1'         ];
@@ -212,20 +256,21 @@ classdef spin_wave_calculator < handle
 
             % Variables required for other parts of the calculations
             self.hamVars = struct('SI', SI, 'RR', RR, 'dR', dR, ...
-                                  'AD0', AD0, 'BC0', BC0, 'A20', A20, 'D20', D20, ...
-                                  'idxA1', idxA1, 'idxB', idxB, 'idxD1', idxD1, ...
-                                  'idxA2', idxA2, 'idxD2', idxD2, 'idxMF', idxMF, ...
-                                  'nCoupling', nCoupling);
+                'AD0', AD0, 'BC0', BC0, 'A20', A20, 'D20', D20, ...
+                'idxA1', idxA1, 'idxB', idxB, 'idxD1', idxD1, ...
+                'idxA2', idxA2, 'idxD2', idxD2, 'idxMF', idxMF, ...
+                'nCoupling', nCoupling);
         end
 
-        function [ham, hklExt] = calculateHamiltonian(self, hkl)
+        function [ham, hklExt] = calculateHamiltonian(self, hkl, rotC)
+
             nExt = self.magnetic_structure.N_ext;
             nMagExt = self.magnetic_structure.nMagExt;
             % Copies the variables in hamVars to this workspace
             assign_vars(self.hamVars);
 
-            % TODO: For twins, sort out rotC
-            rotC = eye(3);
+            % Calculates the contribution of the magnetic field (Zeeman term) to the Hamiltonian
+            MF = repmat(SI.field*rotC*self.spinWaveObject.unit.muB * permute(mmat(SI.g,permute(eta,[1 3 2])),[1 3 2]),[1 2]);
 
             % calculate all magnetic form factors
             if self.parameters.formfact
@@ -263,12 +308,12 @@ classdef spin_wave_calculator < handle
             %     ExpF = exp(1i*permute(sum(repmat(dR,[1 1 nHklMEM]).*repmat(...
             %         permute(hklExtMEM,[1 3 2]),[1 nCoupling 1]),1),[2 3 1]))';
             ExpF = exp(1i*permute(sum(bsxfun(@times,dR,permute(hklExt,[1 3 2])),1),[2 3 1]))';
-        
+
             % Creates the matrix elements containing zed.
             A1 = bsxfun(@times,     AD0 ,ExpF);
             B  = bsxfun(@times,     BC0 ,ExpF);
             D1 = bsxfun(@times,conj(AD0),ExpF);
-        
+
             % Store all indices
             % SP1: speedup for creating the matrix elements
             %idxAll = [idxA1; idxB; idxC; idxD1]; % SP1
@@ -276,24 +321,24 @@ classdef spin_wave_calculator < handle
             % Store all matrix elements
             %ABCD   = [A1     B     conj(B)  D1]; % SP1
             ABCD   = [A1     2*B      D1];
-        
+
             % Stores the matrix elements in ham.
             %idx3   = repmat(1:nHklMEM,[4*nCoupling 1]); % SP1
             idx3   = repmat(1:nHkl,[3*nCoupling 1]);
             idxAll = [repmat(idxAll,[nHkl 1]) idx3(:)];
             idxAll = idxAll(:,[2 1 3]);
-        
+
             ABCD   = ABCD';
-        
+
             % quadratic form of the boson Hamiltonian stored as a square matrix
             ham = accumarray(idxAll,ABCD(:),[2*nMagExt 2*nMagExt nHkl]);
-        
+
             ham = ham + repmat(accumarray([idxA2; idxD2],2*[A20 D20],[1 1]*2*nMagExt),[1 1 nHkl]);
-        
+
             if any(SI.field)
                 ham = ham + repmat(accumarray(idxMF,MF,[1 1]*2*nMagExt),[1 1 nHkl]);
             end
-        
+
             ham = (ham + conj(permute(ham,[2 1 3])))/2;
         end
 
@@ -303,11 +348,11 @@ classdef spin_wave_calculator < handle
                 % All the matrix calculations are according to Colpa's paper
                 % J.H.P. Colpa, Physica 93A (1978) 327-353
                 [V, omega] = spinwave_hermit(ham, self.parameters, nMagExt);
-        
+
             else
                 % All the matrix calculations are according to White's paper
                 % R.M. White, et al., Physical Review 139, A450?A454 (1965)
-        
+
                 % diagonal of the boson commutator matrix
                 gCommd = [ones(nMagExt,1); -ones(nMagExt,1)];
                 % boson commutator matrix
@@ -315,11 +360,11 @@ classdef spin_wave_calculator < handle
                 %gd = diag(g);
 
                 gham = mmat(gComm,ham);
-        
+
                 [V, omega, orthWarn] = eigorth(gham, self.parameters.omega_tol, self.parameters.useMex);
-        
+
                 %orthWarn0 = orthWarn || orthWarn0;
-        
+
                 for ii = 1:size(omega, 2)
                     % multiplication with g removed to get negative and positive
                     % energies as well
@@ -343,30 +388,30 @@ classdef spin_wave_calculator < handle
             VExtR = repmat(permute(V  ,[4 5 1 2 3]),[3 3 1 1 1]);
             % V left: conjugate transpose of V
             VExtL = conj(permute(VExtR,[1 2 4 3 5]));
-        
+
             % Introduces the exp(-ikR) exponential factor.
             ExpF =  exp(-1i*sum(repmat(permute(hklExt0MEM,[1 3 2]),[1 nMagExt 1]).*repmat(RR,[1 1 nHklMEM]),1));
             % Includes the sqrt(Si/2) prefactor.
             ExpF = ExpF.*repmat(sqrt(S0/2),[1 1 nHklMEM]);
-        
+
             ExpFL =      repmat(permute(ExpF,[1 4 5 2 3]),[3 3 2*nMagExt 2]);
             % conj transpose of ExpFL
             ExpFR = conj(permute(ExpFL,[1 2 4 3 5]));
-        
+
             zeda = repmat(permute([self.zed conj(self.zed)],[1 3 4 2]),[1 3 2*nMagExt 1 nHklMEM]);
             % conj transpose of zeda
             zedb = conj(permute(zeda,[2 1 4 3 5]));
-        
+
             % calculate magnetic structure factor using the hklExt0 Q-values
             % since the S(Q+/-k,omega) correlation functions also belong to the
             % F(Q)^2 form factor
-        
+
             if self.parameters.formfact
                 % include the form factor in the z^alpha, z^beta matrices
                 zeda = zeda.*repmat(permute(self.parameters.FF(:,hklIdxMEM),[3 4 5 1 2]),[3 3 2*nMagExt 2 1]);
                 zedb = zedb.*repmat(permute(self.parameters.FF(:,hklIdxMEM),[3 4 1 5 2]),[3 3 2 2*nMagExt 1]);
             end
-        
+
             if self.parameters.gtensor
                 gtensor = SI.g;
                 % include the g-tensor
