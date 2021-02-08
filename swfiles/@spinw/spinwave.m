@@ -252,16 +252,10 @@ end
 
 %% New object-oriented code
 sw_calculator = sw_classes.spin_wave_calculator(obj, varargin{:});
-if ~sw_calculator.magnetic_structure.incomm
+% if ~sw_calculator.magnetic_structure.incomm
     spectra = sw_calculator.calculateSpinWave(hkl);
-    return;
-end
-
-
-%% Old functional code
-
-% for linear scans create the Q line(s)
-hkl = sw_qscan(hkl);
+%     return;
+% end
 
 % parse input arguments
 [param, useMex] = spinwave_parse_input(varargin);
