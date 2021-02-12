@@ -42,6 +42,7 @@ classdef spin_wave_calculator < handle
                 for ii = 1:nChunk
                     hklIdxMEM = self.qvectors.getIdx(ii);
                     hklChunk = self.qvectors.getChunk(ii);
+                    % If twin, then rotate the current hkl set by its rotation matrix
                     if ~self.parameters.notwin
                         hklChunk = (hklChunk' * rotQ(:,:,iTwin))';
                     end
@@ -53,13 +54,13 @@ classdef spin_wave_calculator < handle
                     if self.parameters.saveV
                         Vsave(:,:,hklIdxMEM) = V; %#ok<AGROW>
                     end
-                    Sab{ii} = self.spinspincorrel(V, hklExt, hklIdxMEM);
+                    Sab{ii} = self.spinspincorrel(V, hklExt);
                 end
                 Sab = cat(4, Sab{:});
                 if self.parameters.sortMode
                     % sort the spin wave modes
                     [omega, Sab] = sortmode(omega,reshape(Sab,9,size(Sab,3),[]));
-                    Sab          = reshape(Sab,3,3,size(Sab,2),[]);
+                    Sab = reshape(Sab,3,3,size(Sab,2),[]);
                 end
                 if ~self.parameters.notwin
                     omega_twin{iTwin} = omega;
@@ -70,7 +71,7 @@ classdef spin_wave_calculator < handle
                     if self.parameters.saveH
                         Hsave_twin{iTwin} = Hsave;
                     end
-                    if ~(isdiag(rotC) && all(abs(diag(rotC) - 1) < self.parameters.tol))
+                    if ~(isdiag(rotC) && all(abs(diag(rotC) - 1) < self.parameters.tol))  % Not identity
                         % Rotates the spin-spin correlation tensor using the twin rotation matrix
                         sSab = size(Sab_twin{iTwin});
                         % TODO: consider using a simple loop of 'reshape->arrayfun->reshape' operation
@@ -81,6 +82,10 @@ classdef spin_wave_calculator < handle
                     end
                 end
             end
+            % If number of formula units are given per cell normalize to formula unit
+            if self.spinWaveObject.unit.nformula > 0
+                Sab = Sab / double(self.spinWaveObject.unit.nformula);
+            end
             % Creates output structure with the calculated values.
             if self.parameters.notwin
                 spectra.omega    = omega;
@@ -90,7 +95,7 @@ classdef spin_wave_calculator < handle
                 spectra.Sab      = Sab_twin;
             end
             spectra.hkl      = self.qvectors.hkl;
-            spectra.hklA     = 2*pi*(spectra.hkl'/self.spinWaveObject.basisvector)';
+            spectra.hklA     = 2*pi*((self.spinWaveObject.unit.qmat*spectra.hkl)' / self.spinWaveObject.basisvector)';
             spectra.helical  = false; % TODO: sort out incommensurate and helical
             spectra.norm     = false;
             spectra.nformula = double(self.spinWaveObject.unit.nformula);
@@ -292,6 +297,9 @@ classdef spin_wave_calculator < handle
             % Copies the variables in hamVars to this workspace
             assign_vars(self.hamVars);
 
+            % Transform the momentum values to the new lattice coordinate system
+            hkl = self.spinWaveObject.unit.qmat*hkl;
+
             % calculate all magnetic form factors
             if self.parameters.formfact
                 obj = self.spinWaveObject;
@@ -303,23 +311,20 @@ classdef spin_wave_calculator < handle
                 self.parameters.FF = repmat(self.parameters.formfactfun(permute(obj.unit_cell.ff(1,:,obj.matom.idx),[3 2 1]),hklA0),[prod(nExt) 1]);
             end
 
-            % Transform the momentum values to the new lattice coordinate system
-            hkl = self.spinWaveObject.unit.qmat*hkl;
-
             % Calculates momentum transfer in A^-1 units.
-            hklA = 2*pi*(hkl'/self.spinWaveObject.basisvector)';
+            %hklA = 2*pi*(hkl'/self.spinWaveObject.basisvector)';
 
             % number of Q points
             nHkl0 = size(hkl,2);
 
-            hkl0   = hkl;
+            %hkl0   = hkl;
             nHkl   = nHkl0;
 
             % Converts wavevector list into the extended unit cell
             % hklExt  = bsxfun(@times,hklExt,nExt')*2*pi;
             hklExt  = 2*pi*hkl.*nExt';
             % q values without the +/-k_m value
-            hklExt0 = hklExt;
+            %hklExt0 = hklExt;
 
             % Creates the matrix of exponential factors nCoupling x nHkl size.
             % Extends dR into 3 x 3 x nCoupling x nHkl
@@ -395,7 +400,7 @@ classdef spin_wave_calculator < handle
             end
         end
 
-        function Sab = spinspincorrel(self, V, hklExt0MEM, hklIdxMEM)
+        function Sab = spinspincorrel(self, V, hklExt0MEM)
             nMagExt = self.magnetic_structure.nMagExt;
             S0 = self.magnetic_structure.S_mag;
             nExt = self.magnetic_structure.N_ext;
@@ -428,8 +433,8 @@ classdef spin_wave_calculator < handle
 
             if self.parameters.formfact
                 % include the form factor in the z^alpha, z^beta matrices
-                zeda = zeda.*repmat(permute(self.parameters.FF(:,hklIdxMEM),[3 4 5 1 2]),[3 3 2*nMagExt 2 1]);
-                zedb = zedb.*repmat(permute(self.parameters.FF(:,hklIdxMEM),[3 4 1 5 2]),[3 3 2 2*nMagExt 1]);
+                zeda = zeda.*repmat(permute(self.parameters.FF,[3 4 5 1 2]),[3 3 2*nMagExt 2 1]);
+                zedb = zedb.*repmat(permute(self.parameters.FF,[3 4 1 5 2]),[3 3 2 2*nMagExt 1]);
             end
 
             if self.parameters.gtensor
