@@ -39,6 +39,13 @@ classdef spin_wave_calculator < handle
                 Sab = cell(1, nChunk);
                 Hsave = [];
                 Vsave = [];
+                % Incommensurate loop
+                %if self.magnetic_structure.incomm
+                %    k_incomm_vec = [-self.magnetic_structure.km 0 self.magnetic_structure.km];
+                %else
+                %    k_incomm_vec = 0
+                %end
+                % for k_incomm = k_incomm_vec
                 for ii = 1:nChunk
                     hklIdxMEM = self.qvectors.getIdx(ii);
                     hklChunk = self.qvectors.getChunk(ii);
@@ -47,6 +54,7 @@ classdef spin_wave_calculator < handle
                         hklChunk = (hklChunk' * rotQ(:,:,iTwin))';
                     end
                     [ham, hklExt] = self.calculateHamiltonian(hklChunk, rotC);
+                    %[ham, hklExt] = self.calculateHamiltonian(hklChunk, rotC, k_incomm);
                     if self.parameters.saveH
                         Hsave(:,:,hklIdxMEM) = ham; %#ok<AGROW>
                     end
@@ -448,14 +456,6 @@ classdef spin_wave_calculator < handle
             % Normalizes the intensity to single unit cell.
             %Sab = cat(4,Sab,squeeze(sum(zeda.*ExpFL.*VExtL,4)).*squeeze(sum(zedb.*ExpFR.*VExtR,3))/prod(nExt));
             Sab = squeeze(sum(zeda.*ExpFL.*VExtL,4)) .* squeeze(sum(zedb.*ExpFR.*VExtR,3)) / prod(nExt);
-        end
-
-        function incommensurateCase(self)
-            error('Not implemented');
-        end
-
-        function twinCase(self)
-            error('Not implemented');
         end
 
     end
