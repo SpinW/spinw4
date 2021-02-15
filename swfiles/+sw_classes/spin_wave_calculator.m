@@ -36,34 +36,38 @@ classdef spin_wave_calculator < handle
             for iTwin = 1:nTwins
                 rotC = self.spinWaveObject.twin.rotc(:,:,iTwin);
                 omega = [];
-                Sab = cell(1, nChunk);
                 Hsave = [];
                 Vsave = [];
                 % Incommensurate loop
-                %if self.magnetic_structure.incomm
-                %    k_incomm_vec = [-self.magnetic_structure.km 0 self.magnetic_structure.km];
-                %else
-                %    k_incomm_vec = 0
-                %end
-                % for k_incomm = k_incomm_vec
-                for ii = 1:nChunk
-                    hklIdxMEM = self.qvectors.getIdx(ii);
-                    hklChunk = self.qvectors.getChunk(ii);
-                    % If twin, then rotate the current hkl set by its rotation matrix
-                    if ~self.parameters.notwin
-                        hklChunk = (hklChunk' * rotQ(:,:,iTwin))';
-                    end
-                    [ham, hklExt] = self.calculateHamiltonian(hklChunk, rotC);
-                    %[ham, hklExt] = self.calculateHamiltonian(hklChunk, rotC, k_incomm);
-                    if self.parameters.saveH
-                        Hsave(:,:,hklIdxMEM) = ham; %#ok<AGROW>
-                    end
-                    [V, omega(:,hklIdxMEM)] = self.diagonaliseHamiltonian(ham);  %#ok<AGROW>
-                    if self.parameters.saveV
-                        Vsave(:,:,hklIdxMEM) = V; %#ok<AGROW>
-                    end
-                    Sab{ii} = self.spinspincorrel(V, hklExt);
+                if self.magnetic_structure.incomm
+                    k_incomm_vec = [-self.magnetic_structure.km', zeros(3,1), self.magnetic_structure.km'];
+                else
+                    k_incomm_vec = zeros(3,1);
                 end
+                omega_cell = cell(1, size(k_incomm_vec,2));
+                Sab = cell(size(k_incomm_vec,2), nChunk);
+                incomm_idx = 0;
+                for k_incomm = k_incomm_vec
+                    incomm_idx = incomm_idx+1;
+                    for ii = 1:nChunk
+                        hklIdxMEM = self.qvectors.getIdx(ii);
+                        hklChunk = self.qvectors.getChunk(ii);
+                        % If twin, then rotate the current hkl set by its rotation matrix
+                        if ~self.parameters.notwin
+                            hklChunk = (hklChunk' * rotQ(:,:,iTwin))';
+                        end
+                        [ham, hklExt] = self.calculateHamiltonian(hklChunk, rotC, k_incomm);
+                        if self.parameters.saveH
+                            Hsave(:,:,hklIdxMEM) = ham; %#ok<AGROW>
+                        end
+                        [V, omega_cell{incomm_idx}(:,hklIdxMEM)] = self.diagonaliseHamiltonian(ham);  %#ok<AGROW>
+                        if self.parameters.saveV
+                            Vsave(:,:,hklIdxMEM) = V; %#ok<AGROW>
+                        end
+                        Sab{incomm_idx,ii} = self.spinspincorrel(V, hklExt);
+                    end
+                end
+                omega = cat(3, omega_cell{:});
                 Sab = cat(4, Sab{:});
                 if self.parameters.sortMode
                     % sort the spin wave modes
@@ -299,7 +303,7 @@ classdef spin_wave_calculator < handle
                 'nCoupling', nCoupling);
         end
 
-        function [ham, hklExt] = calculateHamiltonian(self, hkl, rotC)
+        function [ham, hklExt] = calculateHamiltonian(self, hkl, rotC, k_incomm)
             nExt = self.magnetic_structure.N_ext;
             nMagExt = self.magnetic_structure.nMagExt;
             % Copies the variables in hamVars to this workspace
@@ -307,6 +311,13 @@ classdef spin_wave_calculator < handle
 
             % Transform the momentum values to the new lattice coordinate system
             hkl = self.spinWaveObject.unit.qmat*hkl;
+            % Converts wavevector list into the extended unit cell
+            % hklExt  = bsxfun(@times,hklExt,nExt')*2*pi;
+            hklExt  = (2*pi*hkl.*nExt') + k_incomm;
+            % q values without the +/-k_m value
+            %hklExt0 = hklExt;
+
+            hkl = hkl + k_incomm;
 
             % calculate all magnetic form factors
             if self.parameters.formfact
@@ -327,12 +338,6 @@ classdef spin_wave_calculator < handle
 
             %hkl0   = hkl;
             nHkl   = nHkl0;
-
-            % Converts wavevector list into the extended unit cell
-            % hklExt  = bsxfun(@times,hklExt,nExt')*2*pi;
-            hklExt  = 2*pi*hkl.*nExt';
-            % q values without the +/-k_m value
-            %hklExt0 = hklExt;
 
             % Creates the matrix of exponential factors nCoupling x nHkl size.
             % Extends dR into 3 x 3 x nCoupling x nHkl
