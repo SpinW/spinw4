@@ -7,6 +7,7 @@ classdef spin_wave_calculator < handle
         magnetic_structure
         qvectors
         hamiltonian  % this could be its own class which contains its own calculation methon for the eigenvectors and eigenvalues (magnonEnergies)
+        gtensor
     end
 
     properties(Access=private)
@@ -31,44 +32,65 @@ classdef spin_wave_calculator < handle
             Sab_twin = cell(1,nTwins);
             Hsave_twin = cell(1,nTwins);
             Vsave_twin = cell(1,nTwins);
+            Sabp_twin = cell(1,nTwins);
+            omegap_twin = cell(1,nTwins);
             % Gets the transformation matrices for the hkl for each twin
             [~, rotQ] = self.spinWaveObject.twinq([0;0;0]);
             for iTwin = 1:nTwins
                 rotC = self.spinWaveObject.twin.rotc(:,:,iTwin);
-                omega = [];
-                Hsave = [];
-                Vsave = [];
                 % Incommensurate loop
                 if self.magnetic_structure.incomm
                     k_incomm_vec = [-self.magnetic_structure.km', zeros(3,1), self.magnetic_structure.km'];
                 else
                     k_incomm_vec = zeros(3,1);
                 end
-                omega_cell = cell(1, size(k_incomm_vec,2));
-                Sab = cell(size(k_incomm_vec,2), nChunk);
+                sz_incomm = size(k_incomm_vec,2);
+                Hsave = cell(1, sz_incomm);
+                Vsave = cell(1, sz_incomm);
+                omega_cell = cell(1, sz_incomm);
+                Sab_cell = cell(1, sz_incomm);
                 incomm_idx = 0;
                 for k_incomm = k_incomm_vec
+                    Sab = cell(1, nChunk);
                     incomm_idx = incomm_idx+1;
                     for ii = 1:nChunk
                         hklIdxMEM = self.qvectors.getIdx(ii);
-                        hklChunk = self.qvectors.getChunk(ii);
+                        % Get chunk and apply user defined transformation in qmat (see also spinw.newcell)
+                        hklChunk = self.spinWaveObject.unit.qmat * self.qvectors.getChunk(ii);
                         % If twin, then rotate the current hkl set by its rotation matrix
                         if ~self.parameters.notwin
                             hklChunk = (hklChunk' * rotQ(:,:,iTwin))';
                         end
-                        [ham, hklExt] = self.calculateHamiltonian(hklChunk, rotC, k_incomm);
+                        ham = self.calculateHamiltonian(hklChunk, rotC, k_incomm);
                         if self.parameters.saveH
-                            Hsave(:,:,hklIdxMEM) = ham; %#ok<AGROW>
+                            Hsave{incomm_idx}(:,:,hklIdxMEM) = ham;
                         end
-                        [V, omega_cell{incomm_idx}(:,hklIdxMEM)] = self.diagonaliseHamiltonian(ham);  %#ok<AGROW>
+                        [V, omega_cell{incomm_idx}(:,hklIdxMEM)] = self.diagonaliseHamiltonian(ham);
                         if self.parameters.saveV
-                            Vsave(:,:,hklIdxMEM) = V; %#ok<AGROW>
+                            Vsave{incomm_idx}(:,:,hklIdxMEM) = V;
                         end
-                        Sab{incomm_idx,ii} = self.spinspincorrel(V, hklExt);
+                        Sab{ii} = self.spinspincorrel(V, hklChunk);
+                        if self.magnetic_structure.incomm && self.parameters.saveSabp && incomm_idx == 2
+                            Sabp_twin{iTwin}(:,:,:,hklIdxMEM) = Sab{ii};
+                        end
+                    end
+                    Sab_cell{incomm_idx} = cat(4, Sab{:});
+                    if self.magnetic_structure.incomm
+                        % Transforms from the rotating frame to the lab frame according to eq (40) of Toth and Lake (2015).
+                        if incomm_idx == 1
+                            Sab_cell{1} = mmat(Sab_cell{1}, self.magnetic_structure.R1);
+                        elseif incomm_idx == 2
+                            Sab_cell{2} = mmat(Sab_cell{2}, self.magnetic_structure.R2);
+                        elseif incomm_idx == 3
+                            Sab_cell{3} = mmat(Sab_cell{3}, conj(self.magnetic_structure.R1));
+                        end
                     end
                 end
-                omega = cat(3, omega_cell{:});
-                Sab = cat(4, Sab{:});
+                if self.magnetic_structure.incomm && self.parameters.saveSabp
+                    omegap_twin{iTwin} = omega_cell{2};
+                end
+                omega = cat(1, omega_cell{:});
+                Sab = cat(3, Sab_cell{:});
                 if self.parameters.sortMode
                     % sort the spin wave modes
                     [omega, Sab] = sortmode(omega,reshape(Sab,9,size(Sab,3),[]));
@@ -78,10 +100,10 @@ classdef spin_wave_calculator < handle
                     omega_twin{iTwin} = omega;
                     Sab_twin{iTwin} = Sab;
                     if self.parameters.saveV
-                        Vsave_twin{iTwin} = Vsave;
+                        Vsave_twin{iTwin} = cat(3, Vsave{:});
                     end
                     if self.parameters.saveH
-                        Hsave_twin{iTwin} = Hsave;
+                        Hsave_twin{iTwin} = cat(3, Hsave{:});
                     end
                     if ~(isdiag(rotC) && all(abs(diag(rotC) - 1) < self.parameters.tol))  % Not identity
                         % Rotates the spin-spin correlation tensor using the twin rotation matrix
@@ -114,17 +136,21 @@ classdef spin_wave_calculator < handle
             % Save different intermediate results.
             if self.parameters.saveV
                 if self.parameters.notwin
-                    spectra.V = Vsave;
+                    spectra.V = cat(3, Vsave{:});
                 else
                     spectra.V = Vsave_twin;
                 end
             end
             if self.parameters.saveH
                 if self.parameters.notwin
-                    spectra.H = Hsave;
+                    spectra.H = cat(3, Hsave{:});
                 else
                     spectra.H = cat(3, Hsave_twin{:});
                 end
+            end
+            if self.parameters.saveSabp
+                spectra.Sabp = cat(4, Sabp_twin{:});
+                spectra.omegap = cat(2, omega_twin{:});
             end
             % save the important parameters
             spectra.param.sortMode  = self.parameters.sortMode;
@@ -268,6 +294,21 @@ classdef spin_wave_calculator < handle
             % magnetic couplings, 3x3xnJ
             JJ = cat(3,reshape(SS.all(6:14,:),3,3,[]),SI.aniso);
 
+            if self.magnetic_structure.incomm
+                % transform JJ due to the incommensurate wavevector
+                [~, K] = sw_rot(self.magnetic_structure.n, self.magnetic_structure.km*dR*2*pi);
+                % multiply JJ with K matrices for every interaction
+                % and symmetrising JJ for the rotating basis
+                JJ = (mmat(JJ,K)+mmat(K,JJ))/2;
+            end
+
+            if self.parameters.gtensor
+                self.gtensor = SI.g;
+                if self.magnetic_structure.incomm
+                    self.gtensor = self.magnetic_structure.transform_frame(self.gtensor);
+                end
+            end
+
             nCoupling = size(JJ,3);
 
             zedL = repmat(permute(self.zed(:,atom1),[1 3 2]),[1 3 1]);
@@ -303,21 +344,11 @@ classdef spin_wave_calculator < handle
                 'nCoupling', nCoupling);
         end
 
-        function [ham, hklExt] = calculateHamiltonian(self, hkl, rotC, k_incomm)
+        function ham = calculateHamiltonian(self, hkl, rotC, k_incomm)
             nExt = self.magnetic_structure.N_ext;
             nMagExt = self.magnetic_structure.nMagExt;
             % Copies the variables in hamVars to this workspace
             assign_vars(self.hamVars);
-
-            % Transform the momentum values to the new lattice coordinate system
-            hkl = self.spinWaveObject.unit.qmat*hkl;
-            % Converts wavevector list into the extended unit cell
-            % hklExt  = bsxfun(@times,hklExt,nExt')*2*pi;
-            hklExt  = (2*pi*hkl.*nExt') + k_incomm;
-            % q values without the +/-k_m value
-            %hklExt0 = hklExt;
-
-            hkl = hkl + k_incomm;
 
             % calculate all magnetic form factors
             if self.parameters.formfact
@@ -338,6 +369,12 @@ classdef spin_wave_calculator < handle
 
             %hkl0   = hkl;
             nHkl   = nHkl0;
+
+            % Converts wavevector list into the extended unit cell
+            % hklExt  = bsxfun(@times,hklExt,nExt')*2*pi;
+            hklExt  = 2*pi*(hkl.*nExt' + k_incomm);
+            % q values without the +/-k_m value
+            %hklExt0 = hklExt;
 
             % Creates the matrix of exponential factors nCoupling x nHkl size.
             % Extends dR into 3 x 3 x nCoupling x nHkl
@@ -413,10 +450,11 @@ classdef spin_wave_calculator < handle
             end
         end
 
-        function Sab = spinspincorrel(self, V, hklExt0MEM)
+        function Sab = spinspincorrel(self, V, hkl)
             nMagExt = self.magnetic_structure.nMagExt;
             S0 = self.magnetic_structure.S_mag;
             nExt = self.magnetic_structure.N_ext;
+            hklExt0MEM = 2*pi*hkl.*nExt';
             nHklMEM = size(V,3);
             % Copies the variables in hamVars to this workspace
             assign_vars(self.hamVars);
@@ -432,7 +470,7 @@ classdef spin_wave_calculator < handle
             % Includes the sqrt(Si/2) prefactor.
             ExpF = ExpF.*repmat(sqrt(S0/2),[1 1 nHklMEM]);
 
-            ExpFL =      repmat(permute(ExpF,[1 4 5 2 3]),[3 3 2*nMagExt 2]);
+            ExpFL = repmat(permute(ExpF,[1 4 5 2 3]),[3 3 2*nMagExt 2]);
             % conj transpose of ExpFL
             ExpFR = conj(permute(ExpFL,[1 2 4 3 5]));
 
@@ -451,16 +489,20 @@ classdef spin_wave_calculator < handle
             end
 
             if self.parameters.gtensor
-                gtensor = SI.g;
                 % include the g-tensor
-                zeda = mmat(repmat(permute(gtensor,[1 2 4 3]),[1 1 1 2]),zeda);
-                zedb = mmat(zedb,repmat(gtensor,[1 1 2]));
+                zeda = mmat(repmat(permute(self.gtensor,[1 2 4 3]),[1 1 1 2]),zeda);
+                zedb = mmat(zedb,repmat(self.gtensor,[1 1 2]));
             end
             % Dynamical structure factor from S^alpha^beta(k) correlation function.
             % Sab(alpha,beta,iMode,iHkl), size: 3 x 3 x 2*nMagExt x nHkl.
             % Normalizes the intensity to single unit cell.
             %Sab = cat(4,Sab,squeeze(sum(zeda.*ExpFL.*VExtL,4)).*squeeze(sum(zedb.*ExpFR.*VExtR,3))/prod(nExt));
             Sab = squeeze(sum(zeda.*ExpFL.*VExtL,4)) .* squeeze(sum(zedb.*ExpFR.*VExtR,3)) / prod(nExt);
+
+            if self.magnetic_structure.incomm && self.magnetic_structure.helical
+                % integrating out the arbitrary initial phase of the helix
+                Sab = self.magnetic_structure.transform_frame(Sab);
+            end
         end
 
     end

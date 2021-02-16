@@ -1,18 +1,21 @@
 classdef magnetic_structure < handle
     properties
-        S
-        k
-        n
-        N_ext
-        tol
+        S      % Magnetic moments, 3xN array; N=number of spins
+        k      % Magnetic propagation vector, 3x1 vector
+        n      % Normal vector to spin plane, 3x1 vector
+        N_ext  % Supercell size, 3x1 vector
+        tol    % Tolerance factor for incommensurate determination
     end
 
     properties(SetAccess=private)
-        S_mag
-        nMagExt
-        km
-        incomm
-        helical
+        S_mag    % Magnitude of spins, 1xN vector
+        nMagExt  % Number of spins in supercell, scalar
+        km       % Magnetic propagation vector in the supercell, 3x1 vector
+        incomm   % Flag to indicate if structure in incommensurate
+        helical  % Flag to indicate if structure is helical
+        nx       % Rodriguez's rotation matrix to convert from rotating to lab frame
+        R1       % R1 matrix in eq (39) of Toth and Lake (2015)
+        R2       % R2 matrix in eq (39) of Toth and Lake (2015)
         constructed = false
     end
 
@@ -70,6 +73,13 @@ classdef magnetic_structure < handle
             % e1 = e2 x e3
             e1  = cross(e2,e3);
         end
+        function out = transform_frame(self, in)
+            % Applies the transformation from the lab to the rotating frame
+            m1 = eye(3);
+            out = 1/2*in - 1/2*mmat(mmat(self.nx,in),self.nx) + ...
+                  1/2*mmat(mmat(self.R2-m1,in),self.R2) + ...  % R2 also called nxn in old code
+                  1/2*mmat(mmat(self.R2,in),2*self.R2-m1);
+        end
     end
 
     methods(Access=private)
@@ -85,6 +95,11 @@ classdef magnetic_structure < handle
             km = self.km;
             tol = self.tol * 2;
             self.helical = sum(abs(mod(abs(2*km)+tol,1)-tol).^2) > tol;  % Whether incomm wavevector is multiple of 2
+            self.nx  = [0 -self.n(3) self.n(2);
+                        self.n(3) 0 -self.n(1);
+                       -self.n(2) self.n(1) 0];
+            self.R2 = self.n'*self.n;  % Previously also called nxn in code
+            self.R1 = 1/2*(eye(3) - self.R2 - 1i*self.nx);
         end
     end
 end
