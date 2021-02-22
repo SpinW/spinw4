@@ -292,10 +292,10 @@ classdef spin_wave_calculator < handle
                 if (self.magnetic_structure.incomm)
                     error('spinw:spinwave:Biquadratic','Biquadratic exchange can be only calculated for k=0 structures!');
                 end
-                bqdR    = SS.all(1:3,:);
-                bqAtom1 = SS.all(4,:);
-                bqAtom2 = SS.all(5,:);
-                bqJJ    = SS.all(6,:);
+                bqdR    = SS.all(1:3,self.bq);
+                bqAtom1 = SS.all(4,self.bq);
+                bqAtom2 = SS.all(5,self.bq);
+                bqJJ    = SS.all(6,self.bq);
                 nbqCoupling = numel(bqJJ);
 
                 % matrix elements: M,N,P,Q
@@ -330,6 +330,7 @@ classdef spin_wave_calculator < handle
                 idxbqD  = [bqAtom1' bqAtom1'+nMagExt];
                 %idxbqD2 = [bqAtom1'+nMagExt bqAtom1]; % SP2
 
+                SS.all = SS.all(1:14,SS.all(15,:)==0);
             end
 
             %fprintf0(fid,['Calculating COMMENSURATE spin wave spectra '...
