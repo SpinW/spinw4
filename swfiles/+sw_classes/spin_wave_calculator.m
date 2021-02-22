@@ -418,36 +418,25 @@ classdef spin_wave_calculator < handle
                 % Angstrom^-1 units for Q
                 hklA0 = 2*pi*(hkl'/obj.basisvector)';
                 % store form factor per Q point for each atom in the magnetic supercell
-                % TODO check prod(nExt)? instead of nExt
-                %FF = repmat(param.formfactfun(permute(obj.unit_cell.ff(1,:,obj.matom.idx),[3 2 1]),hklA0),[1 nExt]);
                 self.parameters.FF = repmat(self.parameters.formfactfun(permute(obj.unit_cell.ff(1,:,obj.matom.idx),[3 2 1]),hklA0),[prod(nExt) 1]);
             end
 
-            % Calculates momentum transfer in A^-1 units.
-            %hklA = 2*pi*(hkl'/self.spinWaveObject.basisvector)';
-
             % number of Q points
-            nHkl0 = size(hkl,2);
-
-            %hkl0   = hkl;
-            nHkl   = nHkl0;
+            nHkl = size(hkl,2);
 
             % Converts wavevector list into the extended unit cell
-            % hklExt  = bsxfun(@times,hklExt,nExt')*2*pi;
             hklExt  = 2*pi*(hkl.*nExt' + k_incomm);
-            % q values without the +/-k_m value
-            %hklExt0 = hklExt;
 
             % Creates the matrix of exponential factors nCoupling x nHkl size.
-            % Extends dR into 3 x 3 x nCoupling x nHkl
-            %     ExpF = exp(1i*permute(sum(repmat(dR,[1 1 nHkl]).*repmat(...
-            %         permute(hklExt,[1 3 2]),[1 nCoupling 1]),1),[2 3 1]))';
-            ExpF = exp(1i*permute(sum(bsxfun(@times,dR,permute(hklExt,[1 3 2])),1),[2 3 1]))';
+            % dR is 3 x nCoupling; hklExt is 3 x nHkl; inner() expands dimensions
+            ExpF = exp(1i * inner(dR, hklExt))';
 
             % Creates the matrix elements containing zed.
-            A1 = bsxfun(@times,     AD0 ,ExpF);
-            B  = bsxfun(@times,     BC0 ,ExpF);
-            D1 = bsxfun(@times,conj(AD0),ExpF);
+            % with implicit dimension expansion:
+            % AD0 etc are 1 x nCoupling; ExF is nHkl x nCoupling
+            A1 = AD0 .* ExpF;
+            B  = BC0 .* ExpF;
+            D1 = conj(AD0) .* ExpF;
 
             % Store all indices
             % SP1: speedup for creating the matrix elements
@@ -471,13 +460,11 @@ classdef spin_wave_calculator < handle
             ham = ham + repmat(accumarray([idxA2; idxD2],2*[A20 D20],[1 1]*2*nMagExt),[1 1 nHkl]);
 
             if any(self.bq)
-                % bqExpF = exp(1i*permute(sum(repmat(bqdR,[1 1 nHkl]).*repmat(...
-                %     permute(hklExt,[1 3 2]),[1 nbqCoupling 1]),1),[2 3 1]))';
-                bqExpF = exp(1i*permute(sum(bsxfun(@times,bqdR,permute(hklExt,[1 3 2])),1),[2 3 1]))';
-
-                bqA  = bsxfun(@times,     bqA0, bqExpF);
-                bqA2 = bsxfun(@times,conj(bqA0),bqExpF);
-                bqB  = bsxfun(@times,     bqB0, bqExpF);
+                bqExpF = exp(1i * inner(bqdR, hklExt))';
+                % Implicit singleton expansion.
+                bqA  = bqA0 .* bqExpF;
+                bqA2 = conj(bqA0) .* bqExpF;
+                bqB  = bqB0 .* bqExpF;
                 idxbqAll = [idxbqA; idxbqA2; idxbqB];
                 %bqABCD = [bqA bqA2 2*bqB];
                 bqABCD = [bqA bqA2 2*bqB];
@@ -613,7 +600,6 @@ function [V, omega] = spinwave_hermit(ham, param, nMagExt)
         for ii = 1:nHklMEM
             V(:,:,ii) = V(:,:,ii)*diag(sqrt(gCommd.*omega(:,ii)));
         end
-        % V = bsxfun(@times,invK,V);
         V = sw_mtimesx(invK,V);
     else
         for ii = 1:nHklMEM
@@ -671,4 +657,13 @@ function assign_vars(vars)
     for ii = 1:numel(vnames)
         assignin('caller', vnames{ii}, vars.(vnames{ii}));
     end
+end
+
+function out = inner(A, B)
+    % Inner product with dimension expansion.
+    % A must be M x N_A and B must be M x N_B
+    % N_A and N_B do not have to be the same (M must be).
+    % Output is N_A x N_B array
+    assert(size(A,1) == size(B,1));
+    out = squeeze(sum(A .* permute(B, [1 3 2]), 1));
 end
