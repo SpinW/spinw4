@@ -14,6 +14,8 @@ classdef spin_wave_calculator < handle
         zed     % The u vector in eq (9) of Toth & Lake
         SI      % A struct with single-ion (SI) properties
         RR      % A 3 x nMagExt matrix with positions of the spins/atoms
+        orthWarn = false   % Flag if orthogonal warning is triggered
+        posdefWarn = false % Flag if positive-definite warning triggered
     end
 
     methods(Access=public)
@@ -34,16 +36,21 @@ classdef spin_wave_calculator < handle
             Vsave_twin = cell(1,nTwins);
             Sabp_twin = cell(1,nTwins);
             omegap_twin = cell(1,nTwins);
+            if self.magnetic_structure.incomm
+                k_incomm_vec = [-self.magnetic_structure.km', zeros(3,1), self.magnetic_structure.km'];
+                calc_type = 'INCOMMENSURATE';
+            else
+                k_incomm_vec = zeros(3,1);
+                calc_type = 'COMMENSURATE';
+            end
+            fprintf0(self.parameters.fid,['Calculating %s spin wave spectra '...
+                '(nMagExt = %d, nHkl = %d, nTwin = %d)...\n'], calc_type, ...
+                self.magnetic_structure.nMagExt, self.qvectors.nHkl, nTwins);
             % Gets the transformation matrices for the hkl for each twin
             [~, rotQ] = self.spinWaveObject.twinq([0;0;0]);
             for iTwin = 1:nTwins
                 rotC = self.spinWaveObject.twin.rotc(:,:,iTwin);
                 % Incommensurate loop
-                if self.magnetic_structure.incomm
-                    k_incomm_vec = [-self.magnetic_structure.km', zeros(3,1), self.magnetic_structure.km'];
-                else
-                    k_incomm_vec = zeros(3,1);
-                end
                 sz_incomm = size(k_incomm_vec,2);
                 Hsave = cell(1, sz_incomm);
                 Vsave = cell(1, sz_incomm);
@@ -115,6 +122,14 @@ classdef spin_wave_calculator < handle
                         Sab_twin{iTwin} = reshape(cat(3, Sab{:}), sSab);  % Converts back to normal matrix
                     end
                 end
+            end
+            if self.posdefWarn && ~self.parameters.fitmode
+                warning('spinw:spinwave:NonPosDefHamiltonian',['To make the Hamiltonian '...
+                    'positive definite, a small omega_tol value was added to its diagonal!'])
+            end
+            % issue eigorth warning
+            if self.orthWarn
+                warning('spinw:spinwave:NoOrth','Eigenvectors of defective eigenvalues cannot be orthogonalised at some q-point!');
             end
             % If number of formula units are given per cell normalize to formula unit
             if self.spinWaveObject.unit.nformula > 0
@@ -295,11 +310,9 @@ classdef spin_wave_calculator < handle
                 bqAtom2 = SS.all(5, bq);
                 bqJJ    = SS.all(6, bq);
                 self.bq_hamiltonian = sw_classes.biquadratic_hamiltonian(bqJJ, bqdR, bqAtom1, bqAtom2, self.zed, self.eta, S_mag);
+                % Remove the biquadratic interactions for subsequent calculations
                 SS.all = SS.all(1:14,SS.all(15,:)==0);
             end
-
-            %fprintf0(fid,['Calculating COMMENSURATE spin wave spectra '...
-            %    '(nMagExt = %d, nHkl = %d, nTwin = %d)...\n'],nMagExt, nHkl0, nTwin);
 
             dR    = [SS.all(1:3,:) zeros(3,nMagExt)];
             atom1 = [SS.all(4,:)   1:nMagExt];
@@ -363,7 +376,7 @@ classdef spin_wave_calculator < handle
             if self.parameters.hermit
                 % All the matrix calculations are according to Colpa's paper
                 % J.H.P. Colpa, Physica 93A (1978) 327-353
-                [V, omega] = spinwave_hermit(ham, self.parameters, nMagExt);
+                [V, omega, self.posdefWarn] = spinwave_hermit(ham, self.parameters, nMagExt);
 
             else
                 % All the matrix calculations are according to White's paper
@@ -377,9 +390,9 @@ classdef spin_wave_calculator < handle
 
                 gham = mmat(gComm,ham);
 
-                [V, omega, orthWarn] = eigorth(gham, self.parameters.omega_tol, self.parameters.useMex);
+                [V, omega, orthWarn1] = eigorth(gham, self.parameters.omega_tol, self.parameters.useMex);
 
-                %orthWarn0 = orthWarn || orthWarn0;
+                self.orthWarn = orthWarn1 || self.orthWarn;
 
                 for ii = 1:size(omega, 2)
                     % multiplication with g removed to get negative and positive
@@ -420,7 +433,6 @@ classdef spin_wave_calculator < handle
             % calculate magnetic structure factor using the hklExt0 Q-values
             % since the S(Q+/-k,omega) correlation functions also belong to the
             % F(Q)^2 form factor
-
             if self.parameters.formfact
                 % include the form factor in the z^alpha, z^beta matrices
                 zeda = zeda.*repmat(permute(self.parameters.FF,[3 4 5 1 2]),[3 3 2*nMagExt 2 1]);
@@ -448,7 +460,8 @@ classdef spin_wave_calculator < handle
 end
 
 
-function [V, omega] = spinwave_hermit(ham, param, nMagExt)
+function [V, omega, warn1] = spinwave_hermit(ham, param, nMagExt)
+    warn1 = false;
     nHklMEM = size(ham, 3);
 
     % diagonal of the boson commutator matrix
