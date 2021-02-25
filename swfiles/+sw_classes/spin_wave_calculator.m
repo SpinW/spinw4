@@ -1,20 +1,19 @@
 classdef spin_wave_calculator < handle
     properties
-        spinWaveObject
-        parameters
-        spectra
-        magnonEnergies
-        magnetic_structure
-        qvectors
-        hamiltonian  % this could be its own class which contains its own calculation methon for the eigenvectors and eigenvalues (magnonEnergies)
-        gtensor
-        bq
+        spinWaveObject     % spinw class parent object
+        parameters         % a struct of parameters
+        magnetic_structure % a sw_classes.magnetic_structure object
+        qvectors           % a sw_classes.qvectors object
+        hamiltonian        % a sw_classes.hamiltonian object
+        bq_hamiltonian     % a sw_classes.biquadratic_hamiltonian object
     end
 
     properties(Access=private)
-        eta
-        zed
-        hamVars
+        gtensor % a (3 x 3 x nMagExt) matrix
+        eta     % The v vector in eq (9) of Toth & Lake
+        zed     % The u vector in eq (9) of Toth & Lake
+        SI      % A struct with single-ion (SI) properties
+        RR      % A 3 x nMagExt matrix with positions of the spins/atoms
     end
 
     methods(Access=public)
@@ -204,10 +203,10 @@ classdef spin_wave_calculator < handle
             inpForm.size   = [inpForm.size   {[1 1]       [1 1] [1 1] }];
 
             self.parameters = sw_readparam(inpForm, varargin{:});
-            if ~self.parameters.fitmode
-                % save the time of the beginning of the calculation
-                self.spectra.datestart = datestr(now);
-            end
+            %if ~self.parameters.fitmode
+            %    % save the time of the beginning of the calculation
+            %    self.spectra.datestart = datestr(now);
+            %end
             if self.parameters.fitmode
                 self.parameters.sortMode = false;
                 self.parameters.tid = 0;
@@ -280,56 +279,22 @@ classdef spin_wave_calculator < handle
             % Create the interaction matrix and atomic positions in the extended
             % magnetic unit cell.
             nMagExt = self.magnetic_structure.nMagExt;
-            S_mag = self.magnetic_structure.S_mag;
-            [SS, SI, RR] = self.spinWaveObject.intmatrix('fitmode',true,'conjugate',true);
+            S_mag = self.magnetic_structure.S_mag';
+            [SS, self.SI, self.RR] = self.spinWaveObject.intmatrix('fitmode',true,'conjugate',true);
 
             % add the dipolar interactions to SS.all
             SS.all = [SS.all SS.dip];
 
-            self.bq = SS.all(15,:)==1;  % SS is an array of Js. Each row corresponds to each unique property.
-
-            if (any(self.bq))
+            bq = SS.all(15,:)==1;  % SS is an array of Js. Each row corresponds to each unique property.
+            if (any(bq))
                 if (self.magnetic_structure.incomm)
                     error('spinw:spinwave:Biquadratic','Biquadratic exchange can be only calculated for k=0 structures!');
                 end
-                bqdR    = SS.all(1:3,self.bq);
-                bqAtom1 = SS.all(4,self.bq);
-                bqAtom2 = SS.all(5,self.bq);
-                bqJJ    = SS.all(6,self.bq);
-                nbqCoupling = numel(bqJJ);
-
-                % matrix elements: M,N,P,Q
-                bqM = sum(self.eta(:,bqAtom1).*self.eta(:,bqAtom2),1);
-                bqN = sum(self.eta(:,bqAtom1).*self.zed(:,bqAtom2),1);
-                bqO = sum(self.zed(:,bqAtom1).*self.zed(:,bqAtom2),1);
-                bqP = sum(conj(self.zed(:,bqAtom1)).*self.zed(:,bqAtom2),1);
-                bqQ = sum(self.zed(:,bqAtom1).*self.eta(:,bqAtom2),1);
-
-                Si = self.magnetic_structure.S_mag(bqAtom1);
-                Sj = self.magnetic_structure.S_mag(bqAtom2);
-                % C_ij matrix elements
-                bqA0 = (Si.*Sj).^(3/2).*(bqM.*conj(bqP) + bqQ.*conj(bqN)).*bqJJ;
-                bqB0 = (Si.*Sj).^(3/2).*(bqM.*bqO + bqQ.*bqN).*bqJJ;
-                bqC  = Si.*Sj.^2.*(conj(bqQ).*bqQ - 2*bqM.^2).*bqJJ;
-                bqD  = Si.*Sj.^2.*(bqQ).^2.*bqJJ;
-
-                % Creates the serial indices for every matrix element in ham matrix.
-                % Aij(k) matrix elements (b^+ b)
-                idxbqA  = [bqAtom1' bqAtom2'];
-                % b b^+ elements
-                idxbqA2 = [bqAtom1' bqAtom2']+nMagExt;
-
-                % Bij(k) matrix elements (b^+ b^+)
-                idxbqB  = [bqAtom1' bqAtom2'+nMagExt];
-                % transpose of B (b b)
-                %idxbqB2 = [bqAtom2'+nMagExt bqAtom1']; % SP2
-
-                idxbqC  = [bqAtom1' bqAtom1'];
-                idxbqC2 = [bqAtom1' bqAtom1']+nMagExt;
-
-                idxbqD  = [bqAtom1' bqAtom1'+nMagExt];
-                %idxbqD2 = [bqAtom1'+nMagExt bqAtom1]; % SP2
-
+                bqdR    = SS.all(1:3, bq);
+                bqAtom1 = SS.all(4, bq);
+                bqAtom2 = SS.all(5, bq);
+                bqJJ    = SS.all(6, bq);
+                self.bq_hamiltonian = sw_classes.biquadratic_hamiltonian(bqJJ, bqdR, bqAtom1, bqAtom2, self.zed, self.eta, S_mag);
                 SS.all = SS.all(1:14,SS.all(15,:)==0);
             end
 
@@ -339,8 +304,9 @@ classdef spin_wave_calculator < handle
             dR    = [SS.all(1:3,:) zeros(3,nMagExt)];
             atom1 = [SS.all(4,:)   1:nMagExt];
             atom2 = [SS.all(5,:)   1:nMagExt];
-            % magnetic couplings, 3x3xnJ
-            JJ = cat(3,reshape(SS.all(6:14,:),3,3,[]),SI.aniso);
+
+            % magnetic couplings, 3x3xnJ; Jij in eq (26) of Toth & Lake.
+            JJ = cat(3, reshape(SS.all(6:14,:),3,3,[]), self.SI.aniso);
 
             if self.magnetic_structure.incomm
                 % transform JJ due to the incommensurate wavevector
@@ -351,66 +317,18 @@ classdef spin_wave_calculator < handle
             end
 
             if self.parameters.gtensor
-                self.gtensor = SI.g;
+                self.gtensor = self.SI.g;
                 if self.magnetic_structure.incomm
                     self.gtensor = self.magnetic_structure.transform_frame(self.gtensor);
                 end
             end
 
-            nCoupling = size(JJ,3);
-
-            zedL = repmat(permute(self.zed(:,atom1),[1 3 2]),[1 3 1]);
-            zedR = repmat(permute(self.zed(:,atom2),[3 1 2]),[3 1 1]);
-
-            etaL = repmat(permute(self.eta(:,atom1),[1 3 2]),[1 3 1]);
-            etaR = repmat(permute(self.eta(:,atom2),[3 1 2]),[3 1 1]);
-
-            SiSj = sqrt(S_mag(atom1).*S_mag(atom2));
-
-            % Creates temporary values for calculating matrix elements.
-            AD  =  shiftdim(sum(sum(etaL.*JJ.*etaR,2),1),1);
-            A20 = -S_mag(atom2).*AD;
-            D20 = -S_mag(atom1).*AD;
-            BC0 =  SiSj.*shiftdim(sum(sum(zedL.*JJ.*     zedR ,2),1),1);
-            AD0 =  SiSj.*shiftdim(sum(sum(zedL.*JJ.*conj(zedR),2),1),1);
-
-            % Creates the serial indices for every matrix element in ham matrix.
-            idxA1 = [atom1'         atom2'         ];
-            idxA2 = [atom1'         atom1'         ];
-            idxB  = [atom1'         atom2'+nMagExt ];
-            % transpose of idxB
-            %idxC  = [atom2'+nMagExt atom1'         ]; % SP1
-            idxD1 = idxA1+nMagExt;
-            idxD2 = [atom2'+nMagExt atom2'+nMagExt ];
-            idxMF = [(1:2*nMagExt)' (1:2*nMagExt)' ];
-
-            % Variables required for other parts of the calculations
-            self.hamVars = struct('SI', SI, 'RR', RR, 'dR', dR, ...
-                'AD0', AD0, 'BC0', BC0, 'A20', A20, 'D20', D20, ...
-                'idxA1', idxA1, 'idxB', idxB, 'idxD1', idxD1, ...
-                'idxA2', idxA2, 'idxD2', idxD2, 'idxMF', idxMF, ...
-                'nCoupling', nCoupling);
-            if any(self.bq)
-                self.hamVars.bqdR = bqdR;
-                self.hamVars.bqA0 = bqA0;
-                self.hamVars.bqB0 = bqB0;
-                self.hamVars.idxbqA = idxbqA;
-                self.hamVars.idxbqA2 = idxbqA2;
-                self.hamVars.idxbqB = idxbqB;
-                self.hamVars.nbqCoupling = nbqCoupling;
-                self.hamVars.bqC = bqC;
-                self.hamVars.bqD = bqD;
-                self.hamVars.idxbqC = idxbqC;
-                self.hamVars.idxbqC2 = idxbqC2;
-                self.hamVars.idxbqD = idxbqD;
-            end
+            % Calculates the hkl-independent part of the Hamiltonian in a separate class
+            self.hamiltonian = sw_classes.hamiltonian(JJ, dR, atom1, atom2, self.zed, self.eta, S_mag);
         end
 
         function ham = calculateHamiltonian(self, hkl, rotC, k_incomm)
             nExt = self.magnetic_structure.N_ext;
-            nMagExt = self.magnetic_structure.nMagExt;
-            % Copies the variables in hamVars to this workspace
-            assign_vars(self.hamVars);
 
             % calculate all magnetic form factors
             if self.parameters.formfact
@@ -421,66 +339,20 @@ classdef spin_wave_calculator < handle
                 self.parameters.FF = repmat(self.parameters.formfactfun(permute(obj.unit_cell.ff(1,:,obj.matom.idx),[3 2 1]),hklA0),[prod(nExt) 1]);
             end
 
-            % number of Q points
-            nHkl = size(hkl,2);
-
             % Converts wavevector list into the extended unit cell
             hklExt  = 2*pi*(hkl.*nExt' + k_incomm);
 
-            % Creates the matrix of exponential factors nCoupling x nHkl size.
-            % dR is 3 x nCoupling; hklExt is 3 x nHkl; inner() expands dimensions
-            ExpF = exp(1i * inner(dR, hklExt))';
+            % Calculates the hkl-dependent Hamiltonian
+            ham = self.hamiltonian.ham_k(hklExt);
 
-            % Creates the matrix elements containing zed.
-            % with implicit dimension expansion:
-            % AD0 etc are 1 x nCoupling; ExF is nHkl x nCoupling
-            A1 = AD0 .* ExpF;
-            B  = BC0 .* ExpF;
-            D1 = conj(AD0) .* ExpF;
-
-            % Store all indices
-            % SP1: speedup for creating the matrix elements
-            %idxAll = [idxA1; idxB; idxC; idxD1]; % SP1
-            idxAll   = [idxA1; idxB; idxD1];
-            % Store all matrix elements
-            %ABCD   = [A1     B     conj(B)  D1]; % SP1
-            ABCD   = [A1     2*B      D1];
-
-            % Stores the matrix elements in ham.
-            %idx3   = repmat(1:nHkl,[4*nCoupling 1]); % SP1
-            idx3   = repmat(1:nHkl,[3*nCoupling 1]);
-            idxAll = [repmat(idxAll,[nHkl 1]) idx3(:)];
-            idxAll = idxAll(:,[2 1 3]);
-
-            ABCD   = ABCD';
-
-            % quadratic form of the boson Hamiltonian stored as a square matrix
-            ham = accumarray(idxAll,ABCD(:),[2*nMagExt 2*nMagExt nHkl]);
-
-            ham = ham + repmat(accumarray([idxA2; idxD2],2*[A20 D20],[1 1]*2*nMagExt),[1 1 nHkl]);
-
-            if any(self.bq)
-                bqExpF = exp(1i * inner(bqdR, hklExt))';
-                % Implicit singleton expansion.
-                bqA  = bqA0 .* bqExpF;
-                bqA2 = conj(bqA0) .* bqExpF;
-                bqB  = bqB0 .* bqExpF;
-                idxbqAll = [idxbqA; idxbqA2; idxbqB];
-                %bqABCD = [bqA bqA2 2*bqB];
-                bqABCD = [bqA bqA2 2*bqB];
-                bqidx3   = repmat(1:nHkl,[3*nbqCoupling 1]);
-                idxbqAll = [repmat(idxbqAll,[nHkl 1]) bqidx3(:)];
-                idxbqAll = idxbqAll(:,[2 1 3]);
-                bqABCD = bqABCD';
-                % add biquadratic exchange
-                ham = ham + accumarray(idxbqAll,bqABCD(:),[2*nMagExt 2*nMagExt nHkl]);
-                % add diagonal terms
-                ham = ham + repmat(accumarray([idxbqC; idxbqC2; idxbqD],[bqC bqC 2*bqD],[1 1]*2*nMagExt),[1 1 nHkl]);
+            if ~isempty(self.bq_hamiltonian)
+                ham = ham + self.bq_hamiltonian.ham_k(hklExt);
             end
-            if any(SI.field)
+            if any(self.SI.field)
                 % Calculates the contribution of the magnetic field (Zeeman term) to the Hamiltonian
-                MF = repmat(SI.field*rotC*self.spinWaveObject.unit.muB * permute(mmat(SI.g,permute(self.eta,[1 3 2])),[1 3 2]),[1 2]);
-                ham = ham + repmat(accumarray(idxMF,MF,[1 1]*2*nMagExt),[1 1 nHkl]);
+                field = self.SI.field*rotC*self.spinWaveObject.unit.muB;
+                MF = repmat(field * permute(mmat(self.SI.g,permute(self.eta,[1 3 2])),[1 3 2]),[1 2]);
+                ham = ham + diag(MF);
             end
 
             ham = (ham + conj(permute(ham,[2 1 3])))/2;
@@ -525,8 +397,6 @@ classdef spin_wave_calculator < handle
             nExt = self.magnetic_structure.N_ext;
             hklExt0MEM = 2*pi*hkl.*nExt';
             nHklMEM = size(V,3);
-            % Copies the variables in hamVars to this workspace
-            assign_vars(self.hamVars);
 
             % Calculates correlation functions.
             % V right
@@ -535,7 +405,7 @@ classdef spin_wave_calculator < handle
             VExtL = conj(permute(VExtR,[1 2 4 3 5]));
 
             % Introduces the exp(-ikR) exponential factor.
-            ExpF =  exp(-1i*sum(repmat(permute(hklExt0MEM,[1 3 2]),[1 nMagExt 1]).*repmat(RR,[1 1 nHklMEM]),1));
+            ExpF =  exp(-1i*sum(repmat(permute(hklExt0MEM,[1 3 2]),[1 nMagExt 1]).*repmat(self.RR,[1 1 nHklMEM]),1));
             % Includes the sqrt(Si/2) prefactor.
             ExpF = ExpF.*repmat(sqrt(S0/2),[1 1 nHklMEM]);
 
@@ -649,21 +519,4 @@ function [V, omega] = spinwave_hermit(ham, param, nMagExt)
             V(:,:,ii) = inv(K)*U*diag(sqrt(gCommd.*omega(:,end))); %#ok<MINV>
         end
     end
-end
-
-function assign_vars(vars)
-    % Loads save variables to workspace
-    vnames = fieldnames(vars);
-    for ii = 1:numel(vnames)
-        assignin('caller', vnames{ii}, vars.(vnames{ii}));
-    end
-end
-
-function out = inner(A, B)
-    % Inner product with dimension expansion.
-    % A must be M x N_A and B must be M x N_B
-    % N_A and N_B do not have to be the same (M must be).
-    % Output is N_A x N_B array
-    assert(size(A,1) == size(B,1));
-    out = squeeze(sum(A .* permute(B, [1 3 2]), 1));
 end
