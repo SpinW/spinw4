@@ -15,16 +15,16 @@ classdef hamiltonian < sw_classes.hamiltonian_base
     methods
         function self = hamiltonian(JJ, dR, atom1, atom2, u, v, S_mag)
             % Calculates the (bilinear) Hamiltonian: sum_ij Si x Jij x Sj
-            % Syntax: ham = sw_classes.hamiltonia(JJ, dR, i, j, u, v, S_mag)
+            % Syntax: ham = sw_classes.hamiltonia(JJ, dR, atom1, atom2, u, v, S_mag)
             % Inputs:
             %   JJ    % The magnetic couplings (3 x 3 x nCoupling array)
             %   dR    % The difference position vector between atom i and j
-            %   i     % The i indices (1 x nCoupling vector)
-            %   j     % The j indices (1 x nCoupling vector)
+            %   atom1 % The atom1 indices (1 x nCoupling vector)
+            %   atom2 % The atom2 indices (1 x nCoupling vector)
             %   u     % The u vectors (zed in original code, 3 x nMagExt)
             %   v     % The v vectors (eta in original code, 3 x nMagExt)
-            %   Smag  % The magnetic moment magnitude (1 x nMagExt vector)
-            
+            %   S_mag % The magnetic moment magnitude (1 x nMagExt vector)
+
             % Don't know why we need to do this, but otherwise need to take a conj later
             u = conj(u);  % (or the equations don't match Toth & Lake...)
 
@@ -56,7 +56,7 @@ classdef hamiltonian < sw_classes.hamiltonian_base
 
             % The upper right block B^ij in eq (26) of Toth & Lake:
             BC0 =  SiSj.*squeeze(sum(sum(uT_i.*JJ.*u_j,2),1));
-            idxB = [atom1' (atom2' + nMagExt)]; % For upper right block 
+            idxB = [atom1' (atom2' + nMagExt)]; % For upper right block
 
             self.subblocks = {AD0 2*BC0 conj(AD0)};
             self.subidx = [idxA1; idxB; idxD1];

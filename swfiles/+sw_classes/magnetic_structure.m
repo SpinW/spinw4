@@ -1,4 +1,5 @@
 classdef magnetic_structure < handle
+    % Class to handle information required by the spin wave calculations from the magnetic structure
     properties
         S      % Magnetic moments, 3xN array; N=number of spins
         k      % Magnetic propagation vector, 3x1 vector
