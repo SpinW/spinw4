@@ -8,7 +8,6 @@ classdef qvectors < handle
     end
     properties(SetAccess=private)
         nHkl     % number of hkl points to calculate for (scalar)
-        hklIdx
         hklIdx   % (2 x nChunk) array with start and end indices of hkl points for a chunk
     end
     methods
