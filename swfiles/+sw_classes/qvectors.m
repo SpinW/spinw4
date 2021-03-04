@@ -1,10 +1,10 @@
 classdef qvectors < handle
     properties
         hkl
-        nChunk
+        nChunk   % number of times to process (by taking into account the avalable memory)
     end
     properties(SetAccess=private)
-        nHkl
+        nHkl     % number of hkl points to calculate for (scalar)
         hklIdx
     end
     methods

@@ -3,16 +3,16 @@ classdef biquadratic_hamiltonian < sw_classes.hamiltonian_base
     methods
         function self = biquadratic_hamiltonian(JJ, dR, atom1, atom2, u, v, S_mag)
             % Calculates the biquadratic Hamiltonian
-            % Syntax: bq_ham = sw_classes.biquadratic_hamiltonia(JJ, dR, i, j, u, v, S_mag)
+            % Syntax: bq_ham = sw_classes.biquadratic_hamiltonia(JJ, dR, atom1, atom2, u, v, S_mag)
             % Inputs:
-            %   JJ    % The biquadratic couplings (1 x nCoupling vector)
-            %   dR    % The difference position vector between atom i and j
-            %   i     % The i indices (1 x nCoupling vector)
-            %   j     % The j indices (1 x nCoupling vector)
-            %   u     % The u vectors (zed in original code, 3 x nMagExt)
-            %   v     % The v vectors (eta in original code, 3 x nMagExt)
-            %   Smag  % The magnetic moment magnitude (1 x nMagExt vector)
-            
+            %   JJ     % The biquadratic couplings (1 x nCoupling vector)
+            %   dR     % The difference position vector between atom i and j
+            %   atom1  % The atom1 indices (1 x nCoupling vector)
+            %   atom2  % The atom2 indices (1 x nCoupling vector)
+            %   u      % The u vectors (zed in original code, 3 x nMagExt)
+            %   v      % The v vectors (eta in original code, 3 x nMagExt)
+            %   S_mag  % The magnetic moment magnitude (1 x nMagExt vector)
+
             self.dR = dR;
             self.nMagExt = max([atom1 atom2]);
             JJ = transpose(JJ);
@@ -21,7 +21,7 @@ classdef biquadratic_hamiltonian < sw_classes.hamiltonian_base
 
             % In this case the coupling constants JJ are scalars
             % (In the bilinear Hamiltonian they are 3x3 matrices)
-            % So we just compute the uv factors converting from 
+            % So we just compute the uv factors converting from
             % the spins in the rotating to boson operators here
             bqM = sum(v(atom1,:) .* v(atom2,:), 2);
             bqN = sum(v(atom1,:) .* u(atom2,:), 2);
@@ -59,4 +59,3 @@ classdef biquadratic_hamiltonian < sw_classes.hamiltonian_base
         end
     end
 end
-
