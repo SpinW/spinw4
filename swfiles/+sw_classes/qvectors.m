@@ -1,4 +1,7 @@
 classdef qvectors < handle
+    % Class for describing qvectors, which are the hkl coordinates in
+    % three-dimensional space that describes the orientation of one unit cell
+    % of the crystal lattice with respect to the origin
     properties
         hkl
         nChunk   % number of times to process (by taking into account the avalable memory)
@@ -6,6 +9,7 @@ classdef qvectors < handle
     properties(SetAccess=private)
         nHkl     % number of hkl points to calculate for (scalar)
         hklIdx
+        hklIdx   % (2 x nChunk) array with start and end indices of hkl points for a chunk
     end
     methods
         function self = qvectors(hkl)
