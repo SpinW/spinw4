@@ -29,7 +29,7 @@ classdef hamiltonian < sw_classes.hamiltonian_base
             u = conj(u);  % (or the equations don't match Toth & Lake...)
 
             self.dR = dR;
-            self.nMagExt = max([atom1 atom2]);
+            self.nMagExt = max([atom1; atom2]);
 
             % Input u and v are in base order, reorder them according to input
             % indices and expand dimension to match JJ (implicit expansion doesn't work)
@@ -51,12 +51,12 @@ classdef hamiltonian < sw_classes.hamiltonian_base
 
             % The upper left block A^ij in eq (26) of Toth & Lake:
             AD0 =  SiSj.*squeeze(sum(sum(uT_i.*JJ.*conj(u_j),2),1));
-            idxA1 = [atom1' atom2'];            % For upper left block
-            idxD1 = [atom1' atom2'] + nMagExt;  % For lower right block
+            idxA1 = [atom1 atom2];            % For upper left block
+            idxD1 = [atom1 atom2] + nMagExt;  % For lower right block
 
             % The upper right block B^ij in eq (26) of Toth & Lake:
             BC0 =  SiSj.*squeeze(sum(sum(uT_i.*JJ.*u_j,2),1));
-            idxB = [atom1' (atom2' + nMagExt)]; % For upper right block
+            idxB = [atom1 (atom2 + nMagExt)]; % For upper right block
 
             self.subblocks = {AD0 2*BC0 conj(AD0)};
             self.subidx = [idxA1; idxB; idxD1];
@@ -65,8 +65,8 @@ classdef hamiltonian < sw_classes.hamiltonian_base
             AD = squeeze(sum(sum(vT_i.*JJ.*v_j,2),1));
             A20 = -S_mag(atom2).*AD;  % This is -C in A(k)-C in upper left of eq(25)
             D20 = -S_mag(atom1).*AD;  % This is -C in conj(A(-k))-C in lower right of eq(25)
-            idxA2 = [atom1' atom1'];            % For upper left block
-            idxD2 = [atom2' atom2'] + nMagExt;  % For lower right block
+            idxA2 = [atom1 atom1];            % For upper left block
+            idxD2 = [atom2 atom2] + nMagExt;  % For lower right block
 
             self.diagblocks = accumarray([idxA2; idxD2], 2*[A20; D20], [1 1]*2*nMagExt);
         end

@@ -315,8 +315,8 @@ classdef spin_wave_calculator < handle
             end
 
             dR    = [SS.all(1:3,:) zeros(3,nMagExt)];
-            atom1 = [SS.all(4,:)   1:nMagExt];
-            atom2 = [SS.all(5,:)   1:nMagExt];
+            atom1 = transpose([SS.all(4,:)   1:nMagExt]);
+            atom2 = transpose([SS.all(5,:)   1:nMagExt]);
 
             % magnetic couplings, 3x3xnJ; Jij in eq (26) of Toth & Lake.
             JJ = cat(3, reshape(SS.all(6:14,:),3,3,[]), self.SI.aniso);
