@@ -1,13 +1,13 @@
 # This is a basic workflow to help you get started with Actions
 
-name: Combined_CI_V2
+name: SpinW Tests
 
 # Controls when the action will run. 
 on:
   push:
     branches: [ master ]
   pull_request:
-    branches: [ master ]
+    branches: [ master, development ]
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
@@ -38,9 +38,9 @@ jobs:
       - name: Invoke creation hook
         uses: distributhor/workflow-webhook@v1
         env:
-          webhook_url: ${{ secrets.WEBHOOK_URL_MDL }}
-          webhook_secret: ${{ secrets.WEBHOOK_SECRET_MDL }}
-          webhook_auth: ${{ secrets.WEBHOOK_AUTH_MDL }}
+          webhook_url: ${{ secrets.WEBHOOK_URL }}
+          webhook_secret: ${{ secrets.WEBHOOK_SECRET }}
+          webhook_auth: ${{ secrets.WEBHOOK_AUTH }}
           # decrypted on server with `openssl enc -aes-256-cbc -d -a -pbkdf2 -k $OPENSSL_PW`
           data: '{ "ghcontrol": "create", "server" : "${{ matrix.os }}", "PAT" : "${{ env.ENCRYPTED_PAT }}" }'
   
@@ -83,7 +83,7 @@ jobs:
       - name: Invoke destroying hook
         uses: distributhor/workflow-webhook@v1
         env:
-          webhook_url: ${{ secrets.WEBHOOK_URL_MDL }}
-          webhook_secret: ${{ secrets.WEBHOOK_SECRET_MDL }}
-          webhook_auth: ${{ secrets.WEBHOOK_AUTH_MDL }}
+          webhook_url: ${{ secrets.WEBHOOK_URL }}
+          webhook_secret: ${{ secrets.WEBHOOK_SECRET }}
+          webhook_auth: ${{ secrets.WEBHOOK_AUTH }}
           data: '{ "ghcontrol": "destroy", "server" : "${{ matrix.os }}" }'
