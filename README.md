@@ -3,38 +3,16 @@
 
 <img src="spinw3_logo.png" width="150">
 
+# 
+
+
 **SpinW** (*spin-double-u*) is a Matlab library that can optimize magnetic structures using mean field theory and calculate spin wave dispersion and spin-spin correlation function for complex crystal and magnetic structures. For details check http://www.spinw.org
 
-Keep up to date on announcements and more by following [@spinw4](https://twitter.com/intent/user?screen_name=spinw4) on Twitter.
-
 # Current Status
-We are currently in a period of change. **SpinW will be moving to python/C++ (with a Matlab interface)**. I'm sure you can appreciate that this will be a lot of work as all of the code will be completely re-written and updated. In this period the Matlab version will be updated with bug fixes and reviewed external pull requests. More details of the new version will follow. 
+**SpinW is moving to Matlab/python/C++**, which will be the 4.0 release. This is in active devlopment and will take some time. Please checkout https://github.com/SpinW/spinw4/discussions for updates. You can also leave suggestions, questions and contributions to the project.
 
 # Documentation
 * experimental and under construction, the address can change in the future
 * documentation of the master branch
 * use `swdoc`/`swhelp` instead of the Matlab built-in `doc`/`help` functions to get help on SpinW
 * can be also accessed from the browser: https://spinw.github.io/spinwdoc/
-
-# Build Status
-We are currently testing on Centos 7.3, macOS and Windows using MATLAB R2018b. It should be noted that MATLAB symbolic calculation changed post R2018a and as such symbolic results may be differ with a relative tolerance of < 0.03 %.
-
-Testing can be pulled from the [testing](https://www.github.com/spinw/testing) repository and run with the `runspinwFunctionalityTests` command from the `Testing` directory.
-<!---
-### MacOS
-## SpinW
-### Linux - CentOS 7.3 
-[![Build Status](https://jenkins.esss.dk/spinw/job/SpinW-CentOS/badge/icon)](https://jenkins.esss.dk/spinw/job/SpinW-CentOS)
-### MacOS 
-[![Build Status](https://jenkins.esss.dk/spinw/job/SpinW-OSX/badge/icon)](https://jenkins.esss.dk/spinw/job/SpinW-OSX)
-### Windows 10
-[![Build Status](https://jenkins.esss.dk/spinw/job/SpinW-Windows/badge/icon)](https://jenkins.esss.dk/spinw/job/SpinW-Windows/)
-
-## pySpinW
-### Linux - CentOS 7.3 
-[![Build Status](https://jenkins.esss.dk/spinw/job/pySpinW-CentOS-Compile/badge/icon)](https://jenkins.esss.dk/spinw/job/pySpinW-CentOS-Compile)
-### MacOS 
-[![Build Status](https://jenkins.esss.dk/spinw/job/pySpinW-OSX-Compile/badge/icon)](https://jenkins.esss.dk/spinw/job/pySpinW-OSX-Compile)
-### Windows 10
-[![Build Status](https://jenkins.esss.dk/spinw/job/pySpinW-Windows-Compile/badge/icon)](https://jenkins.esss.dk/spinw/job/pySpinW-Windows-Compile/)
--->
