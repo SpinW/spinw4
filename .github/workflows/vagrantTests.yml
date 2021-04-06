@@ -11,45 +11,49 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
+# List which servers to run here separated by commas
+# Valid values are: linux, windows, macos
+env:
+  SERVERS: "linux, windows"
+
 # A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
   # This workflow creates a VM labeled `matlab_linux`
-  create_runner:
+  create_runners:
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.create-vm.outputs.matrix }}
     # Don't run if we ask to skip CI
     if: "!contains(github.event.head_commit.message, '[ci skip]')"
     # Steps represent a sequence of tasks that will be executed as part of the job
-    strategy:
-      matrix:
-        os: [linux, windows]
     steps:
       # Creates the new VM
-      - name: Install OpenSSL
+      - name: Create VM
+        id: create-vm
         run: |
-          sudo sudo apt-get install openssl
-      - name: Encrypt PAT
-        run: |
+          sudo apt-get install openssl
           # The encrypted token has a newline; use tr to replace it with underscore
+          # decrypted on server with `openssl enc -aes-256-cbc -d -a -pbkdf2 -k $OPENSSL_PW`
           encrypted_pat=$(echo ${{ secrets.PERSONAL_TOKEN }} | \
                           openssl enc -e -aes-256-cbc -pbkdf2 -a -k ${{ secrets.OPENSSL_PW }} | \
                           tr "\n" "_")
-          echo "ENCRYPTED_PAT=$encrypted_pat" >> $GITHUB_ENV
-      - name: Invoke creation hook
-        uses: distributhor/workflow-webhook@v1
-        env:
-          webhook_url: ${{ secrets.WEBHOOK_URL }}
-          webhook_secret: ${{ secrets.WEBHOOK_SECRET }}
-          webhook_auth: ${{ secrets.WEBHOOK_AUTH }}
-          # decrypted on server with `openssl enc -aes-256-cbc -d -a -pbkdf2 -k $OPENSSL_PW`
-          data: '{ "ghcontrol": "create", "server" : "${{ matrix.os }}", "PAT" : "${{ env.ENCRYPTED_PAT }}" }'
+          # ID is used to distinguish concurrent jobs (separate vagrant folders)
+          ID="${GITHUB_RUN_ID}_${GITHUB_RUN_NUMBER}"
+          # Sets the IDs as output (set above after runs-on) to be used in the matrix in the next job
+          OSMATRIX=$(echo '"${{ env.SERVERS }}"' | sed "s/\s//g" | jq "split(\",\")|map(.+\"_$ID\")")
+          echo "::set-output name=matrix::{\"os\":$(echo $OSMATRIX)}"
+          DATA="{\"ghcontrol\":\"create\", \"servers\":\"${{ env.SERVERS }}\", \"PAT\":\"$encrypted_pat\", \"ID\":\"$ID\"}"
+          curl -k -v --fail \
+            -H "Content-Type: application/json" \
+            --data "{\"data\":$DATA, \"repository\":\"$GITHUB_REPOSITORY\"}" \
+            ${{ secrets.WEBHOOK_URL }} | jq -e '.success == "true"'
   
   # This workflow runs the actual unit tests if we have suceeded creating the VM
   unit_tests:
-    needs: create_runner
+    needs: create_runners
     strategy:
-      matrix:
-        os: [linux_matlab, windows_matlab]
+      matrix: ${{ fromJson(needs.create_runners.outputs.matrix) }}
     # The type of runner that the job will run on
     runs-on: ${{ matrix.os }}
 
@@ -57,7 +61,7 @@ jobs:
     steps:
       # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
       - uses: actions/checkout@v2
-
+ 
       # Runs MATLAB tests
       - name: Run Matlab
         run: matlab -batch "run run_tests.m"
@@ -68,22 +72,20 @@ jobs:
             token: ${{ secrets.CODECOV_TOKEN }}
 
   # This workflow always runs after the creating and unit tests, destroying the VM
-  destroy_runner:
-    needs: [create_runner, unit_tests]
+  destroy_runners:
+    needs: [create_runners, unit_tests]
     if: always()
     # The type of runner that the job will run on
     runs-on: ubuntu-latest
 
     # Steps represent a sequence of tasks that will be executed as part of the job
-    strategy:
-      matrix:
-        os: [linux, windows]
     steps:
       # Destroy the VM
       - name: Invoke destroying hook
-        uses: distributhor/workflow-webhook@v1
-        env:
-          webhook_url: ${{ secrets.WEBHOOK_URL }}
-          webhook_secret: ${{ secrets.WEBHOOK_SECRET }}
-          webhook_auth: ${{ secrets.WEBHOOK_AUTH }}
-          data: '{ "ghcontrol": "destroy", "server" : "${{ matrix.os }}" }'
+        run: |
+          ID="${GITHUB_RUN_ID}_${GITHUB_RUN_NUMBER}"
+          DATA="{\"ghcontrol\":\"destroy\", \"servers\":\"${{ env.SERVERS }}\", \"ID\":\"$ID\"}"
+          curl -k -v --fail \
+            -H "Content-Type: application/json" \
+            --data "{\"data\":$DATA, \"repository\":\"$GITHUB_REPOSITORY\"}" \
+            ${{ secrets.WEBHOOK_URL }} | jq -e '.success == "true"'
