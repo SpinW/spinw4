@@ -90,7 +90,7 @@ classdef systemstest_spinwave_pcsmo < sw_tests.systemstest_spinwave
                 testCase.verify_test_data({w0(1:numel(w1)) s0(1:numel(w1))}, {w1 s1});
                 testCase.generate_or_verify_generic({w0 s0}, 'data_horace');
             else
-                spec = testCase.swobj.spinwave(qln, 'formfact', true, 'saveV', true, 'saveH', true);
+                spec = testCase.swobj.spinwave(qln, 'formfact', true, 'saveV', true, 'saveH', true, 'optmem', 2);
                 spec = sw_egrid(spec, 'Evect', linspace(0, 100, 200));
                 spec = sw_neutron(spec);
                 testCase.generate_or_verify(spec, {}, struct('V', spec.V, 'H', spec.H), 'approxSab', 0.1);
