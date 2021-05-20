@@ -12,18 +12,41 @@ classdef hamiltonian < sw_classes.hamiltonian_base
         %subidx     % A (nBlock*nCoupling) x 2 list of indices to convert .subblocks to Hamiltonian matrix.
         %diagblocks % A (2*nMagExt x 2*nMagExt) matrix of the -C hkl-independent diagonal blocks
     end
+
     methods
         function self = hamiltonian(JJ, dR, atom1, atom2, u, v, S_mag)
             % Calculates the (bilinear) Hamiltonian: sum_ij Si x Jij x Sj
-            % Syntax: ham = sw_classes.hamiltonia(JJ, dR, atom1, atom2, u, v, S_mag)
-            % Inputs:
-            %   JJ    % The magnetic couplings (3 x 3 x nCoupling array)
-            %   dR    % The difference position vector between atom i and j
-            %   atom1 % The atom1 indices (1 x nCoupling vector)
-            %   atom2 % The atom2 indices (1 x nCoupling vector)
-            %   u     % The u vectors (zed in original code, 3 x nMagExt)
-            %   v     % The v vectors (eta in original code, 3 x nMagExt)
-            %   S_mag % The magnetic moment magnitude (1 x nMagExt vector)
+            %
+            % ### Syntax
+            % `ham = sw_classes.hamiltonia(JJ, dR, atom1, atom2, u, v, S_mag)`
+            %
+            % ### Input Arguments
+            %
+            % `JJ`
+            % : The magnetic couplings (3 x 3 x nCoupling array)
+            %
+            % `dR`
+            % : The difference position vector between atom i and j
+            %
+            % `atom1`
+            % : The atom1 indices (1 x nCoupling vector)
+            %
+            % `atom2`
+            % : The atom2 indices (1 x nCoupling vector)
+            %
+            % `u`
+            % : The u vectors (zed in original code, 3 x nMagExt)
+            %
+            % `v`
+            % : The v vectors (eta in original code, 3 x nMagExt)
+            %
+            %  `S_mag`
+            % : The magnetic moment magnitude (1 x nMagExt vector)
+            %
+            % ### Output Arguments
+            %
+            % `ham`
+            % : The bilinar spin wave hamiltonian
 
             % Don't know why we need to do this, but otherwise need to take a conj later
             u = conj(u);  % (or the equations don't match Toth & Lake...)

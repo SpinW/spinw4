@@ -19,13 +19,61 @@ classdef spin_wave_calculator < handle
     end
 
     methods(Access=public)
+
         function self = spin_wave_calculator(spinWaveObject, varargin)
+            % Creates an object to calculate spin wave spectra from a spinw object
+            %
+            % ### Syntax
+            % `calculator = spin_wave_calculator(spinw_object, varargin)
+            %
+            % ### Description
+            % This object-oriented interface is meant to be used from the .spinwave
+            % method of the `spinw` object. Please use spinw.spinwave() instead.
+            %
+            % ### Input arguments
+            %
+            % `spinw_object`
+            % : the input spinw object defining the spin wave model
+            %
+            % `varargin`
+            % : a cell array of options. Please see spinw.spinwave() for full list.
+            %
+            % ### Output arguments
+            %
+            % `calculator`
+            % : spin_wave_calculator object. Can be used to calculate spectra.
+            %
+            % ### See Also
+            %
+            % spinw.spinwave
             self.spinWaveObject = spinWaveObject;
             self.spinwave_parse_input(varargin{:});
             self.parseMagneticStructure();
             self.prepareHamiltonian();
         end
+
         function spectra = calculateSpinWave(self, hkl)
+            % Method to calculate spin wave dispersion.
+            %
+            % ### Syntax
+            % `spectra = calculator.calculateSpinWave(hkl)`
+            %
+            % ### Description
+            % This is a method of the spin_wave_calculator class to calculate spin wave spectra.
+            %
+            % ### Input Arguments
+            %
+            % `hkl`
+            % : a 3xN matrix of hkl q-vectors at which to calculate the spin wave dispersion and intensity
+            %
+            % ### Output Arguments
+            %
+            % `spectra`
+            % : a structure array containing the spectra. It can be plotted using sw_plotspec
+            %
+            % ### See Also
+            %
+            % spinw.spinwave, sw_plotspect
             self.qvectors = sw_classes.qvectors(hkl);
             nChunk = self.computeNumChunk();
             self.qvectors.nChunk = nChunk;
@@ -46,20 +94,24 @@ classdef spin_wave_calculator < handle
             fprintf0(self.parameters.fid,['Calculating %s spin wave spectra '...
                 '(nMagExt = %d, nHkl = %d, nTwin = %d)...\n'], calc_type, ...
                 self.magnetic_structure.nMagExt, self.qvectors.nHkl, nTwins);
+
             % Gets the transformation matrices for the hkl for each twin
             [~, rotQ] = self.spinWaveObject.twinq([0;0;0]);
+
             for iTwin = 1:nTwins
                 rotC = self.spinWaveObject.twin.rotc(:,:,iTwin);
-                % Incommensurate loop
                 sz_incomm = size(k_incomm_vec,2);
                 Hsave = cell(1, sz_incomm);
                 Vsave = cell(1, sz_incomm);
                 omega_cell = cell(1, sz_incomm);
                 Sab_cell = cell(1, sz_incomm);
                 incomm_idx = 0;
+
+                % Incommensurate loop
                 for k_incomm = k_incomm_vec
                     Sab = cell(1, nChunk);
                     incomm_idx = incomm_idx+1;
+
                     for ii = 1:nChunk
                         hklIdxMEM = self.qvectors.getIdx(ii);
                         % Get chunk and apply user defined transformation in qmat (see also spinw.newcell)
@@ -81,6 +133,7 @@ classdef spin_wave_calculator < handle
                             Sabp_twin{iTwin}(:,:,:,hklIdxMEM) = Sab{ii};
                         end
                     end
+
                     Sab_cell{incomm_idx} = cat(4, Sab{:});
                     if self.magnetic_structure.incomm
                         % Transforms from the rotating frame to the lab frame according to eq (40) of Toth and Lake (2015).
@@ -93,9 +146,11 @@ classdef spin_wave_calculator < handle
                         end
                     end
                 end
+
                 if self.magnetic_structure.incomm && self.parameters.saveSabp
                     omegap_twin{iTwin} = omega_cell{2};
                 end
+
                 omega = cat(1, omega_cell{:});
                 Sab = cat(3, Sab_cell{:});
                 if self.parameters.sortMode
@@ -103,6 +158,7 @@ classdef spin_wave_calculator < handle
                     [omega, Sab] = sortmode(omega,reshape(Sab,9,size(Sab,3),[]));
                     Sab = reshape(Sab,3,3,size(Sab,2),[]);
                 end
+
                 if ~self.parameters.notwin
                     omega_twin{iTwin} = omega;
                     Sab_twin{iTwin} = Sab;
@@ -123,18 +179,22 @@ classdef spin_wave_calculator < handle
                     end
                 end
             end
+
             if self.posdefWarn && ~self.parameters.fitmode
                 warning('spinw:spinwave:NonPosDefHamiltonian',['To make the Hamiltonian '...
                     'positive definite, a small omega_tol value was added to its diagonal!'])
             end
+
             % issue eigorth warning
             if self.orthWarn
                 warning('spinw:spinwave:NoOrth','Eigenvectors of defective eigenvalues cannot be orthogonalised at some q-point!');
             end
+
             % If number of formula units are given per cell normalize to formula unit
             if self.spinWaveObject.unit.nformula > 0
                 Sab = Sab / double(self.spinWaveObject.unit.nformula);
             end
+
             % Creates output structure with the calculated values.
             if self.parameters.notwin
                 spectra.omega    = omega;
@@ -148,6 +208,7 @@ classdef spin_wave_calculator < handle
             spectra.helical  = false; % TODO: sort out incommensurate and helical
             spectra.norm     = false;
             spectra.nformula = double(self.spinWaveObject.unit.nformula);
+
             % Save different intermediate results.
             if self.parameters.saveV
                 if self.parameters.notwin
@@ -167,6 +228,7 @@ classdef spin_wave_calculator < handle
                 spectra.Sabp = cat(4, Sabp_twin{:});
                 spectra.omegap = cat(2, omega_twin{:});
             end
+
             % save the important parameters
             spectra.param.sortMode  = self.parameters.sortMode;
             spectra.param.tol       = self.parameters.tol;
@@ -183,6 +245,7 @@ classdef spin_wave_calculator < handle
 
 
     methods(Access=private)
+
         function nTwin = checkTwins(self)
             % checks for twins
             if self.parameters.notwin
@@ -240,6 +303,7 @@ classdef spin_wave_calculator < handle
         function parseMagneticStructure(self)
             % generate magnetic structure in the rotating notation
             self.magnetic_structure = sw_classes.magnetic_structure(self.spinWaveObject.magstr(), self.parameters.tol);
+
             if self.parameters.cmplxBase
                 % The coordinate system is fixed by the complex magnetisation vectors:
                 % e1 = imag(M), e3 = real(M), e2 = cross(e3,e1)
@@ -258,6 +322,7 @@ classdef spin_wave_calculator < handle
             else
                 [e1, e2, e3] = self.magnetic_structure.get_local_basis();
             end
+
             % assign complex vectors that define the rotating coordinate system on
             % every magnetic atom
             self.zed = e1 + 1i*e2;

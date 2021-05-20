@@ -3,6 +3,7 @@ classdef (Abstract) hamiltonian_base < handle
     % It only defines the ham_k() method to calculate the hkl-dependent part of the Hamiltonian.
     % The constructor is abstract and must be defined concretely by derived classes.
     % The constructor must also set the attributes defined here.
+
     properties(SetAccess=protected)
         dR         % The difference position vector between atom i and j
         nMagExt    % Number of magnetic atoms in the extended supercell
@@ -10,9 +11,24 @@ classdef (Abstract) hamiltonian_base < handle
         subidx     % A (nBlock*nCoupling) x 2 list of indices to convert .subblocks to Hamiltonian matrix.
         diagblocks % A (2*nMagExt x 2*nMagExt) matrix of the -C hkl-independent diagonal blocks
     end
+    
     methods
         function ham = ham_k(self, hkl)
             % Returns the Fourier transformed Hamiltonian matrix
+            %
+            % ### Syntax
+            % `hamk = hamiltonian.ham_k(hkl)
+            %
+            % ### Input Arguments
+            %
+            % `hkl`
+            % : a 3 x nHkl matrix of hkl q-vectors
+            %
+            % ### Output Arguments
+            %
+            % `hamk`
+            % : a N x N x nHkl matrix of transformed Hamiltonian matrices
+
             ExpF = exp(1i * inner(self.dR, hkl));
 
             % Multiplies subblocks by the Fourier phase factor
